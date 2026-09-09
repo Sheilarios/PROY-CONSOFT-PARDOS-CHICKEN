@@ -1,0 +1,46 @@
+[
+  {
+    "model": "pedidos.producto",
+    "pk": 1,
+    "fields": {
+      "nombre": "1/4 Pollo a la brasa",
+      "precio_unitario": "18.50",
+      "stock_disponible": 40,
+      "tiempo_preparacion_minutos": 15,
+      "activo": true
+    }
+  },
+  {
+    "model": "pedidos.producto",
+    "pk": 2,
+    "fields": {
+      "nombre": "Pollo entero",
+      "precio_unitario": "65.00",
+      "stock_disponible": 15,
+      "tiempo_preparacion_minutos": 25,
+      "activo": true
+    }
+  },
+  {
+    "model": "pedidos.producto",
+    "pk": 3,
+    "fields": {
+      "nombre": "Papas fritas porción",
+      "precio_unitario": "12.00",
+      "stock_disponible": 50,
+      "tiempo_preparacion_minutos": 8,
+      "activo": true
+    }
+  },
+  {
+    "model": "pedidos.producto",
+    "pk": 4,
+    "fields": {
+      "nombre": "Gaseosa 1.5L",
+      "precio_unitario": "8.00",
+      "stock_disponible": 60,
+      "tiempo_preparacion_minutos": 1,
+      "activo": true
+    }
+  }
+]
