@@ -3,7 +3,7 @@ Configuración del proyecto: Sistema de control de producción y despacho
 de Pardos Chicken.
 
 Sigue la pila tecnológica definida por el equipo:
-Django 5 + DRF + Simple JWT + DRF-Spectacular + PostgreSQL.
+Django 5 + DRF + Simple JWT + DRF-Spectacular + MySQL.
 """
 from pathlib import Path
 import environ

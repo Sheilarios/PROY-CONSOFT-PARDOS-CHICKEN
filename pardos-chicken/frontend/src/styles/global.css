@@ -117,3 +117,23 @@ td {
   font-weight: 700;
   background: var(--color-borde);
 }
+
+.filtros-pedidos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filtros-pedidos label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.filtros-pedidos input,
+.filtros-pedidos select {
+  min-width: 180px;
+}

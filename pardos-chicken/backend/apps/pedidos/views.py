@@ -3,6 +3,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
+from django_filters import rest_framework as filters
+from datetime import datetime, time, timedelta
+from django.utils import timezone
+
 
 from .models import Producto, Pedido
 from .serializers import (
@@ -11,6 +15,23 @@ from .serializers import (
     PedidoConsultaSerializer,
 )
 from . import validators
+
+
+class PedidoFiltro(filters.FilterSet):
+    fecha = filters.DateFilter(method="filtrar_por_fecha")
+
+    def filtrar_por_fecha(self, queryset, name, value):
+        inicio = timezone.make_aware(datetime.combine(value, time.min))
+        fin = inicio + timedelta(days=1)
+
+        return queryset.filter(
+            fecha_creacion__gte=inicio,
+            fecha_creacion__lt=fin,
+        )
+
+    class Meta:
+        model = Pedido
+        fields = ["fecha", "estado", "modalidad_entrega"]
 
 
 class ProductoViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -38,7 +59,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
     )
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["estado", "modalidad_entrega"]
+    filterset_class = PedidoFiltro
 
     def get_serializer_class(self):
         if self.action == "create":
