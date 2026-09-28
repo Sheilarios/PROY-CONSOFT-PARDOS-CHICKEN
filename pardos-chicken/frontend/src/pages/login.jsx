@@ -22,6 +22,7 @@ export default function Login(){
         });
 
         localStorage.setItem("access_token",respuesta.data.access);
+        localStorage.setItem("refresh_token", respuesta.data.refresh);
 
         navegar("/registrar")
         }catch{

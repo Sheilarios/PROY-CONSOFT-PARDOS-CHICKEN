@@ -15,7 +15,9 @@ export default function App() {
           </NavLink>
           <NavLink to="/registrar" end>Registrar pedido</NavLink>
           <NavLink to="/pedidos">Consultar pedidos</NavLink>
-          <NavLink to="/login" onClick={() => localStorage.removeItem("access_token")}>
+          <NavLink to="/login" onClick={() => {localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token")
+            }}>
             Cerrar sesión
           </NavLink>
         </nav>
