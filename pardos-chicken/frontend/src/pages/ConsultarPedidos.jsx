@@ -9,19 +9,39 @@ const ETIQUETAS_ESTADO = {
   DESPACHADO: "Despachado",
 };
 
+const ETIQUETAS_MODALIDAD = {
+  SALON: "Salón",
+  RECOJO: "Recojo en mostrador",
+  DELIVERY: "Delivery",
+};
+
 export default function ConsultarPedidos() {
   const [pedidos, setPedidos] = useState([]);
   const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroFecha, setFiltroFecha] = useState("");
+  const [filtroModalidad, setFiltroModalidad] = useState("");
   const [cargando, setCargando] = useState(false);
 
   const cargarPedidos = useCallback(() => {
     setCargando(true);
-    const params = filtroEstado ? { estado: filtroEstado } : {};
+    const params = {};
+    if (filtroFecha){
+      params.fecha=filtroFecha;
+    }
+
+    if (filtroEstado){
+      params.estado=filtroEstado;
+    }
+
+    if (filtroModalidad){
+      params.modalidad_entrega = filtroModalidad;
+    }
+
     pedidosService
       .listarPedidos(params)
       .then((data) => setPedidos(data.results || data))
       .finally(() => setCargando(false));
-  }, [filtroEstado]);
+  }, [filtroFecha, filtroEstado, filtroModalidad]);
 
   useEffect(() => {
     cargarPedidos();
@@ -36,17 +56,46 @@ export default function ConsultarPedidos() {
     <section>
       <h2>Consultar pedidos</h2>
 
-      <label>
-        Filtrar por estado:
-        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
-          <option value="">Todos</option>
-          {Object.entries(ETIQUETAS_ESTADO).map(([valor, etiqueta]) => (
-            <option key={valor} value={valor}>
-              {etiqueta}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="filtros-pedidos">
+        <label>
+          Fecha:
+          <input
+            type="date"
+            value={filtroFecha}
+            onChange={(e) => setFiltroFecha(e.target.value)}
+          />
+        </label>
+
+        <label>
+          Estado:
+          <select
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {Object.entries(ETIQUETAS_ESTADO).map(([valor, etiqueta]) => (
+              <option key={valor} value={valor}>
+                {etiqueta}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Tipo de entrega:
+          <select
+            value={filtroModalidad}
+            onChange={(e) => setFiltroModalidad(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {Object.entries(ETIQUETAS_MODALIDAD).map(([valor, etiqueta]) => (
+              <option key={valor} value={valor}>
+                {etiqueta}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {cargando && <p>Cargando pedidos...</p>}
 
@@ -54,6 +103,7 @@ export default function ConsultarPedidos() {
         <thead>
           <tr>
             <th>Código</th>
+            <th>Fecha</th>
             <th>Cliente</th>
             <th>Modalidad</th>
             <th>Estado</th>
@@ -65,8 +115,9 @@ export default function ConsultarPedidos() {
           {pedidos.map((pedido) => (
             <tr key={pedido.id}>
               <td>{pedido.codigo}</td>
+              <td>{new Date(pedido.fecha_creacion).toLocaleString("es-PE")}</td>
               <td>{pedido.cliente_nombre || "—"}</td>
-              <td>{pedido.modalidad_entrega}</td>
+              <td>{ETIQUETAS_MODALIDAD[pedido.modalidad_entrega] || pedido.modalidad_entrega}</td>
               <td>
                 <span className={`badge badge-${pedido.estado.toLowerCase()}`}>
                   {ETIQUETAS_ESTADO[pedido.estado]}
@@ -82,7 +133,7 @@ export default function ConsultarPedidos() {
           ))}
           {pedidos.length === 0 && !cargando && (
             <tr>
-              <td colSpan="6">No hay pedidos para este filtro.</td>
+              <td colSpan="7">No hay pedidos para este filtro.</td>
             </tr>
           )}
         </tbody>

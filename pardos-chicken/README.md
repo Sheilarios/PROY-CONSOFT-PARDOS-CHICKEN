@@ -1,7 +1,7 @@
 # Sistema de Control de Producción y Despacho — Pardos Chicken
 
 Scaffold funcional del **Incremento 1: Registro y Consulta de Pedidos**, construido
-con la pila tecnológica definida por el equipo (Django + DRF + PostgreSQL en el
+con la pila tecnológica definida por el equipo (Django + DRF + MySQL en el
 backend, React + Vite + Axios en el frontend).
 
 ## Estructura del proyecto
@@ -45,21 +45,55 @@ pardos-chicken/
 
 ## Puesta en marcha — Backend
 
-```bash
+### Requisitos previos
+
+- Python 3.12
+- MySQL Server 8.0
+- MySQL Workbench
+
+Crear la base de datos y el usuario desde MySQL Workbench:
+
+```sql
+CREATE DATABASE IF NOT EXISTS pardos_chicken_db
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS 'pardos_app'@'localhost'
+IDENTIFIED BY 'TU_CONTRASENA';
+
+GRANT ALL PRIVILEGES ON pardos_chicken_db.*
+TO 'pardos_app'@'localhost';
+
+GRANT ALL PRIVILEGES ON test_pardos_chicken_db.*
+TO 'pardos_app'@'localhost';
+
+FLUSH PRIVILEGES;
+```
+
+Preparar el backend en PowerShell:
+
+```powershell
 cd backend
-python -m venv .venv
-source .venv/bin/activate            # En Windows: .venv\Scripts\activate
-pip install -r requirements.txt --break-system-packages   # o sin el flag fuera de este entorno
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 
-cp .env.example .env                 # ajustar credenciales de PostgreSQL
+Copy-Item .env.example .env
+```
 
-python manage.py makemigrations
+Editar `.env` y reemplazar `TU_CONTRASENA` por la contraseña local de MySQL.
+
+Crear las tablas y cargar los productos iniciales:
+
+```powershell
 python manage.py migrate
-python manage.py createsuperuser
-
-# Cargar productos de ejemplo
 python manage.py loaddata apps/pedidos/fixtures/productos_demo.json
+python manage.py createsuperuser
+```
 
+Ejecutar el backend:
+
+```powershell
 python manage.py runserver
 ```
 
@@ -74,10 +108,10 @@ pytest
 
 ## Puesta en marcha — Frontend
 
-```bash
+```powershell
 cd frontend
 npm install
-cp .env.example .env
+Copy-Item .env.example .env
 npm run dev
 ```
 
