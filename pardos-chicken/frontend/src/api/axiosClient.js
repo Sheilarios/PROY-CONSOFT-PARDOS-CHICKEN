@@ -12,4 +12,36 @@ axiosClient.interceptors.request.use((config) => {
   return config;
 });
 
+axiosClient.interceptors.response.use(
+  (respuesta) => respuesta,
+  async (error) => {
+    const solicitudOriginal = error.config;
+    const ruta = error.config?.url;
+    const estado = error.response?.status;
+
+    if (estado !== 401 || ruta?.startsWith("token/" ) || !solicitudOriginal || solicitudOriginal._retry) {
+      return Promise.reject(error);
+    }
+    solicitudOriginal._retry = true;
+    const refresh = localStorage.getItem("refresh_token");
+    if (!refresh){
+      localStorage.removeItem("access_token");
+      window.location.assign("/");
+      return Promise.reject(error);
+    }
+    try{
+      const respuesta = await axiosClient.post("token/refresh/", { refresh });
+      const nuevoAccess = respuesta.data.access;
+      localStorage.setItem("access_token", nuevoAccess);
+      return axiosClient(solicitudOriginal);
+
+    }catch{
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      window.location.assign("/");
+      return Promise.reject(error);
+    }
+  }
+);
+
 export default axiosClient;
