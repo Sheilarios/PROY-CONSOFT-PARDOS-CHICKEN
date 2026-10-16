@@ -1,15 +1,7 @@
-"""
-Programación defensiva del módulo de pedidos (Capítulo 5.2 del documento):
-
-- Validación de stock disponible al momento del registro (RN-01).
-- Validación de formato de datos ingresados (teléfono, dirección).
-- Validación de transición de estados (RN-03 / RN-04), reutilizada en el
-  Incremento 2 cuando se actualice el estado de preparación.
-"""
 import re
 from rest_framework.exceptions import ValidationError
 
-TELEFONO_REGEX = re.compile(r"^9\d{8}$")  # celular peruano: 9 dígitos, empieza en 9
+TELEFONO_REGEX = re.compile(r"^9\d{8}$")  
 
 
 def validar_telefono(telefono: str) -> None:
@@ -27,13 +19,6 @@ def validar_direccion_delivery(modalidad: str, direccion: str) -> None:
 
 
 def validar_stock_de_detalles(detalles_solicitados) -> None:
-    """
-    RN-01: un pedido solo se registra si TODOS los productos solicitados
-    tienen stock suficiente. Se valida todo antes de descontar nada,
-    evitando estados intermedios inconsistentes.
-
-    detalles_solicitados: lista de tuplas (producto, cantidad)
-    """
     productos_sin_stock = []
     for producto, cantidad in detalles_solicitados:
         if not producto.hay_stock_suficiente(cantidad):
@@ -50,11 +35,6 @@ def validar_stock_de_detalles(detalles_solicitados) -> None:
 
 
 def validar_transicion_estado(estado_actual: str, estado_nuevo: str, estados_orden) -> None:
-    """
-    RN-04: un pedido no puede retroceder de estado ni saltarse pasos.
-    Se deja lista para reutilizarse en el Incremento 2 (cola de producción)
-    y en el Incremento 3 (despacho).
-    """
     if estado_actual == estado_nuevo:
         return
 
