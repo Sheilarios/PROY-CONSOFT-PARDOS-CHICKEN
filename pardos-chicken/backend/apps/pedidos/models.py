@@ -28,6 +28,21 @@ class Producto(models.Model):
         return self.activo and self.stock_disponible >= cantidad
 
 
+class Cliente(models.Model):
+    """Cliente registrado para buscarlo por nombre en caja."""
+
+    nombre = models.CharField(max_length=120)
+    telefono = models.CharField(max_length=9, unique=True)
+
+    class Meta:
+        verbose_name = "Cliente"
+        verbose_name_plural = "Clientes"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class Pedido(models.Model):
     """
     Pedido registrado por caja (RF-01, RF-02, RF-03).
@@ -59,6 +74,9 @@ class Pedido(models.Model):
     ]
 
     codigo = models.CharField(max_length=12, unique=True, editable=False)
+    cliente = models.ForeignKey(
+        Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name="pedidos"
+    )
     cliente_nombre = models.CharField(max_length=120, blank=True)
     cliente_telefono = models.CharField(max_length=9, blank=True)
     direccion_delivery = models.CharField(max_length=200, blank=True)

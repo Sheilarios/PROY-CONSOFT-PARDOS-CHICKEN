@@ -10,6 +10,7 @@ import {
 // LAYOUT
 // ----------------------------------------------------------------------
 import DashboardLayout from "./layouts/DashboardLayout";
+import RutaProtegida from "./components/RutaProtegida";
 
 // ----------------------------------------------------------------------
 // AUTENTICACIÓN
@@ -41,7 +42,6 @@ import Repartidores from "./pages/despacho/Repartidores";
 // ADMINISTRADOR
 // ----------------------------------------------------------------------
 import Resumen from "./pages/administrador/Resumen";
-import Produccion from "./pages/administrador/Produccion";
 import DetalleProduccion from "./pages/administrador/DetalleProduccion";
 import DespachoAdmin from "./pages/administrador/DespachoAdmin";
 import Historial from "./pages/administrador/Historial";
@@ -68,7 +68,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
 
         {/* ================= RUTAS PROTEGIDAS (Layout) ================= */}
-        <Route element={<DashboardLayout />}>
+        <Route element={<RutaProtegida><DashboardLayout /></RutaProtegida>}>
           {/* ------------------------------------------------- */}
           {/* CAJERO                                            */}
           {/* ------------------------------------------------- */}
@@ -115,7 +115,7 @@ export default function App() {
           {/* ADMINISTRADOR                                     */}
           {/* ------------------------------------------------- */}
           <Route path="/admin/resumen" element={<Resumen />} />
-          <Route path="/admin/produccion" element={<Produccion />} />
+          <Route path="/admin/produccion" element={<ColaCocina />} />
           <Route
             path="/admin/produccion/detalle"
             element={<DetalleProduccion />}

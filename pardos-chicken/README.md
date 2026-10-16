@@ -1,8 +1,8 @@
 # Sistema de Control de Producción y Despacho — Pardos Chicken
 
-Scaffold funcional del **Incremento 1: Registro y Consulta de Pedidos**, con
-Django, Django REST Framework y MySQL en el backend, y React, Vite y Axios en
-el frontend.
+Proyecto con Django, Django REST Framework y MySQL en el backend, y React,
+Vite y Axios en el frontend. El diseño por roles de la rama `main` se integró
+con las funciones implementadas hasta el Capítulo 6.3.
 
 ## Estructura del proyecto
 
@@ -40,6 +40,73 @@ pardos-chicken/
 - **RF-03:** `PedidoViewSet.list/retrieve` consulta pedidos y la acción
   `enviar-a-produccion` los envía a la cola respetando los estados (RN-03/RN-04).
 - **Acceso:** pantalla de inicio de sesión que obtiene el token JWT de la API.
+- **Clientes:** caja puede buscar un cliente por nombre y vincularlo a un pedido.
+  Si ingresa un nombre y teléfono nuevos, el cliente se registra al guardar el
+  pedido con al menos un producto. El ingreso manual sigue disponible.
+
+## Manejo de excepciones (Capítulo 5.5)
+
+- Si un producto no tiene stock suficiente, `POST /api/pedidos/` responde con
+  error `400` y el nombre del producto. No se crea el pedido ni se descuenta stock.
+- `GET /api/pedidos/clientes/buscar-por-nombre/?nombre=...` devuelve hasta diez
+  coincidencias con nombre y teléfono. Incluye clientes registrados y datos de
+  pedidos anteriores, marcados como tales; elegir un pedido anterior reutiliza
+  sus datos y, si tiene nombre y teléfono, registra al cliente al guardar un
+  nuevo pedido válido. Si no hay coincidencias, responde `404` con
+  `Cliente no encontrado.`. Caja puede continuar con los datos manuales del
+  pedido.
+- El formulario muestra estos mensajes en texto legible. Para vincular un
+  cliente registrado al pedido, envía su `cliente_id`. Si el nombre y teléfono
+  son nuevos, `POST /api/pedidos/` crea al cliente y al pedido juntos; si el
+  pedido no tiene productos o stock suficiente, no crea ninguno.
+
+## Refactorización temprana (Capítulo 5.6)
+
+Se renombraron variables locales del flujo de caja para que indiquen qué dato
+contienen: `datos` pasó a `datos_pedido`, `d` a `detalle`, `formulario` a
+`datosPedido` y `coincidencias` a `clientesEncontrados`. También se aclararon
+los nombres de los eventos y de los indicadores de registro. Los campos de la
+API y la lógica de cálculo, stock y registro conservan su comportamiento.
+
+## Incremento 2: priorización de la cola (Capítulo 6.1)
+
+La cola incluye solo pedidos en estado `EN_COLA`. Se ordena por la regla RN-02:
+primero Salón (prioridad 1), luego Delivery (2) y después Recojo (3). Entre
+pedidos de la misma modalidad se atiende primero el que se registró antes;
+si comparten fecha, se usa el ID para mantener un orden estable.
+
+La API expone `GET /api/pedidos/cola-produccion/` y el frontend muestra el
+resultado en **Cola de cocina** y **Producción**, con un botón para actualizar.
+
+## Estados de preparación (Capítulo 6.2)
+
+En **Producción**, cada pedido avanza de **En cola** a **En preparación** con
+`POST /api/pedidos/{id}/iniciar-preparacion/`, y luego a **Listo** con
+`POST /api/pedidos/{id}/marcar-listo/`. El sistema guarda las horas de inicio y
+fin. La pantalla muestra los tres estados y el botón correspondiente a cada
+paso. `GET /api/pedidos/seguimiento-produccion/` muestra los pedidos en
+preparación y listos, mientras `cola-produccion` conserva el orden priorizado.
+
+## Validación de transiciones (Capítulo 6.3)
+
+Las acciones de producción usan `validar_transicion_estado`: solo se puede
+avanzar al siguiente estado. Repetir un paso, saltar de **En cola** a **Listo** o
+retroceder de **Listo** a **En cola** devuelve error `400` sin modificar el
+pedido. La API no acepta `PUT` ni `PATCH` de pedidos, para que el estado solo
+cambie mediante las acciones previstas. En el administrador, el estado se
+muestra como campo de solo lectura.
+
+## Frontend integrado
+
+- El inicio de sesión usa JWT y `GET /api/usuarios/me/` para mostrar el rol real.
+- **Cajero → Registrar pedido** carga productos y stock reales, busca clientes
+  por nombre y guarda el pedido con sus detalles en la API. **Clientes** muestra
+  los registros reales y **Pedidos** permite consultar y enviar a cocina.
+- **Cocinero → Cola de cocina** muestra la cola priorizada y permite avanzar
+  pedidos a **En preparación** y **Listo**. **Administrador → Producción** usa
+  la misma vista funcional.
+- Las demás pantallas del nuevo diseño corresponden a funcionalidades fuera de
+  este alcance y todavía contienen datos de ejemplo.
 
 ## Instalación y ejecución local
 
@@ -157,6 +224,6 @@ los permisos de MySQL para la base de pruebas indicados arriba.
 
 ## Próximos incrementos
 
-- **Incremento 2:** cola de producción y actualización de estados por cocina.
+- **Incremento 2:** cola, preparación y validación de transiciones completadas.
 - **Incremento 3:** verificación y despacho (patrón Strategy por modalidad).
 - **Incremento 4:** incidencias, historial y reportes.

@@ -1,24 +1,17 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
-
-// ----------------------------------------------------------------------
-// Datos de ejemplo del pedido recién confirmado
-// (En producción, esto vendría por props, por location.state o por API)
-// ----------------------------------------------------------------------
-const PEDIDO_EJEMPLO = {
-  id: "#P0017",
-  hora: "12:04",
-  modalidad: "Salón",
-  cantidadArticulos: 3,
-  total: 54.0,
-  checks: ["Datos guardados", "Stock validado", "Enviado a cocina"],
-};
+import { useLocation, useNavigate } from "react-router-dom";
 
 // ----------------------------------------------------------------------
 // Componente
 // ----------------------------------------------------------------------
-export default function PedidoConfirmado({ pedido = PEDIDO_EJEMPLO }) {
+export default function PedidoConfirmado() {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const pedido = state?.pedido;
+
+  if (!pedido) {
+    return <p>No hay un pedido recién registrado. <button type="button" onClick={() => navigate("/cajero/registrar-pedido")}>Registrar pedido</button></p>;
+  }
 
   return (
     <div className="flex flex-col w-full h-full items-center justify-center p-4">
@@ -49,8 +42,7 @@ export default function PedidoConfirmado({ pedido = PEDIDO_EJEMPLO }) {
         <p className="text-slate-500 text-sm font-['Inter'] text-center max-w-lg">
           El pedido{" "}
           <span className="font-semibold text-slate-800">{pedido.id}</span> fue
-          registrado y enviado a cocina. Puedes consultar su avance desde la
-          sección Pedidos.
+          registrado. Puedes enviarlo a cocina desde la sección Pedidos.
         </p>
 
         {/* ---------- Badge ID + hora ---------- */}
@@ -108,13 +100,6 @@ export default function PedidoConfirmado({ pedido = PEDIDO_EJEMPLO }) {
             className="px-6 h-12 bg-white text-slate-800 text-sm font-semibold rounded-lg border border-blue-100 hover:bg-slate-50 transition-colors"
           >
             Ver pedidos
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/cajero/pedidos/detalle")}
-            className="px-6 h-12 bg-white text-orange-600 text-sm font-semibold rounded-lg border border-orange-600 hover:bg-orange-50 transition-colors"
-          >
-            Registrar incidencia
           </button>
         </div>
       </div>

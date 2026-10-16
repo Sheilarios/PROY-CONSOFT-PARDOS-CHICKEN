@@ -37,15 +37,15 @@ export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ⚠️ En un entorno real, esto debería venir de un AuthContext o de localStorage.
-  // Por ahora lo dejamos hardcodeado para que se vea el menú.
-  const rolUsuario = localStorage.getItem("rol") || "administrador";
+  const rolUsuario = localStorage.getItem("rol") || "cajero";
 
   const links = menuConfig[rolUsuario] || [];
 
   const handleLogout = () => {
     localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
     localStorage.removeItem("rol");
+    localStorage.removeItem("user_nombre");
     navigate("/login");
   };
 

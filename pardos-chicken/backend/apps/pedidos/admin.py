@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Producto, Pedido, DetallePedido, Incidencia
+from .models import Producto, Cliente, Pedido, DetallePedido, Incidencia
 
 
 class DetallePedidoInline(admin.TabularInline):
@@ -15,13 +15,19 @@ class ProductoAdmin(admin.ModelAdmin):
     search_fields = ["nombre"]
 
 
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    list_display = ["nombre", "telefono"]
+    search_fields = ["nombre", "telefono"]
+
+
 @admin.register(Pedido)
 class PedidoAdmin(admin.ModelAdmin):
     list_display = ["codigo", "cliente_nombre", "modalidad_entrega", "estado", "fecha_creacion"]
     list_filter = ["estado", "modalidad_entrega"]
     search_fields = ["codigo", "cliente_nombre", "cliente_telefono"]
     inlines = [DetallePedidoInline]
-    readonly_fields = ["codigo", "fecha_creacion", "fecha_actualizacion"]
+    readonly_fields = ["codigo", "estado", "fecha_creacion", "fecha_actualizacion"]
 
 
 @admin.register(Incidencia)

@@ -1,111 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { pedidosService } from "../../api/pedidosService";
 
-// ----------------------------------------------------------------------
-// Datos de ejemplo
-// ----------------------------------------------------------------------
-const PEDIDOS_INICIALES = [
-  {
-    id: "#P0012",
-    modalidad: "Delivery",
-    hora: "11:25",
-    tiempoEnCola: "18 min",
-    productos: "1/2 Pollo, Papas familiares, Gaseosa 1.5 L",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0010",
-    modalidad: "Recojo",
-    hora: "11:30",
-    tiempoEnCola: "13 min",
-    productos: "1 Pollo entero, Papas familiares",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0008",
-    modalidad: "Salón",
-    hora: "11:32",
-    tiempoEnCola: "11 min",
-    productos: "1/4 Pollo, Ensalada, Gaseosa",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0011",
-    modalidad: "Delivery",
-    hora: "11:40",
-    tiempoEnCola: "3 min",
-    productos: "1 Pollo entero, Papas, Ensalada",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0013",
-    modalidad: "Salón",
-    hora: "11:48",
-    tiempoEnCola: "2 min",
-    productos: "1/4 Pollo, Papas familiares",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0014",
-    modalidad: "Delivery",
-    hora: "11:50",
-    tiempoEnCola: "1 min",
-    productos: "1 Pollo entero, Gaseosa 1.5 L",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0015",
-    modalidad: "Recojo",
-    hora: "11:52",
-    tiempoEnCola: "1 min",
-    productos: "1/2 Pollo, Ensalada, Papas",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0016",
-    modalidad: "Salón",
-    hora: "11:54",
-    tiempoEnCola: "1 min",
-    productos: "Papas familiares, Gaseosa 1.5 L",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0017",
-    modalidad: "Delivery",
-    hora: "11:55",
-    tiempoEnCola: "1 min",
-    productos: "1/4 Pollo, Papas, Ensalada",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-  {
-    id: "#P0018",
-    modalidad: "Recojo",
-    hora: "11:56",
-    tiempoEnCola: "1 min",
-    productos: "1 Pollo entero, Papas familiares",
-    estado: "En cola",
-    inicio: "--:--",
-    fin: "--:--",
-  },
-];
 
 // ----------------------------------------------------------------------
 // Estilos
@@ -126,9 +21,46 @@ const ESTADO_STYLES = {
 // Componente
 // ----------------------------------------------------------------------
 export default function ColaCocina() {
-  const [pedidos, setPedidos] = useState(PEDIDOS_INICIALES);
+  const [pedidos, setPedidos] = useState([]);
   const [filtroEstado, setFiltroEstado] = useState("En cola");
   const [filtroModalidad, setFiltroModalidad] = useState("Todas");
+  const [cargando, setCargando] = useState(false);
+  const [procesandoId, setProcesandoId] = useState(null);
+  const [error, setError] = useState("");
+
+  const cargarPedidos = useCallback(async () => {
+    setCargando(true);
+    setError("");
+    try {
+      const [cola, seguimiento] = await Promise.all([
+        pedidosService.listarColaProduccion(),
+        pedidosService.listarSeguimientoProduccion(),
+      ]);
+      const modalidades = { SALON: "Salón", DELIVERY: "Delivery", RECOJO: "Recojo" };
+      const estados = { EN_COLA: "En cola", EN_PREPARACION: "En preparación", LISTO: "Listo" };
+      const hora = (fecha) => fecha ? new Date(fecha).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" }) : "--:--";
+      setPedidos([...cola, ...seguimiento].map((p) => ({
+        id: p.id,
+        codigo: p.codigo,
+        modalidad: modalidades[p.modalidad_entrega],
+        hora: hora(p.fecha_creacion),
+        tiempoEnCola: p.estado === "EN_COLA"
+          ? `${Math.max(0, Math.floor((Date.now() - new Date(p.fecha_creacion)) / 60000))} min`
+          : "—",
+        productos: p.detalles.map((d) => `${d.cantidad} × ${d.producto_nombre}`).join(", "),
+        estado: estados[p.estado],
+        inicio: hora(p.hora_inicio_preparacion),
+        fin: hora(p.hora_fin_preparacion),
+      })));
+    } catch {
+      setError("No se pudo cargar la producción.");
+      setPedidos([]);
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => { cargarPedidos(); }, [cargarPedidos]);
 
   const pedidosFiltrados = useMemo(() => {
     return pedidos.filter((p) => {
@@ -143,28 +75,30 @@ export default function ColaCocina() {
   const contar = (estado) => pedidos.filter((p) => p.estado === estado).length;
 
   // ---------- Acciones ----------
-  const iniciarPreparacion = (id) => {
-    const hora = new Date().toLocaleTimeString("es-PE", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    setPedidos((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, estado: "En preparación", inicio: hora } : p,
-      ),
-    );
-    // await pedidosService.marcarComoPreparado(id); // cuando tengas backend
+  const iniciarPreparacion = async (id) => {
+    setProcesandoId(id);
+    try {
+      await pedidosService.iniciarPreparacion(id);
+      await cargarPedidos();
+    } catch (err) {
+      const estado = err.response?.data?.estado;
+      setError(Array.isArray(estado) ? estado[0] : "No se pudo iniciar la preparación.");
+    } finally {
+      setProcesandoId(null);
+    }
   };
 
-  const marcarListo = (id) => {
-    const hora = new Date().toLocaleTimeString("es-PE", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    setPedidos((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, estado: "Listo", fin: hora } : p)),
-    );
-    // await pedidosService.enviarAProduccion(id);
+  const marcarListo = async (id) => {
+    setProcesandoId(id);
+    try {
+      await pedidosService.marcarListo(id);
+      await cargarPedidos();
+    } catch (err) {
+      const estado = err.response?.data?.estado;
+      setError(Array.isArray(estado) ? estado[0] : "No se pudo marcar el pedido como listo.");
+    } finally {
+      setProcesandoId(null);
+    }
   };
 
   return (
@@ -186,6 +120,12 @@ export default function ColaCocina() {
           </span>
         </div>
       </div>
+
+      <button type="button" onClick={cargarPedidos} disabled={cargando || procesandoId !== null} className="self-start px-4 py-2 rounded-md bg-orange-600 text-white text-xs font-semibold">
+        Actualizar cola
+      </button>
+      {cargando && <p className="text-xs text-slate-500">Cargando pedidos...</p>}
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
 
       {/* ---------- Filtros ---------- */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -245,7 +185,6 @@ export default function ColaCocina() {
                   "Acción",
                   "Inicio",
                   "Fin",
-                  "Incidencia",
                 ].map((col) => (
                   <th
                     key={col}
@@ -260,7 +199,7 @@ export default function ColaCocina() {
               {pedidosFiltrados.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={9}
                     className="px-4 py-8 text-center text-sm text-slate-500"
                   >
                     No hay pedidos para los filtros seleccionados.
@@ -273,7 +212,7 @@ export default function ColaCocina() {
                     className="border-t border-slate-200 hover:bg-slate-50"
                   >
                     <td className="px-3 py-3 text-xs font-semibold text-slate-800 font-['Inter']">
-                      {p.id}
+                      {p.codigo}
                     </td>
                     <td className="px-3 py-3">
                       <span
@@ -309,6 +248,7 @@ export default function ColaCocina() {
                         <button
                           type="button"
                           onClick={() => iniciarPreparacion(p.id)}
+                          disabled={procesandoId !== null}
                           className="px-4 py-2 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700 transition-colors whitespace-nowrap"
                         >
                           Iniciar preparación
@@ -318,6 +258,7 @@ export default function ColaCocina() {
                         <button
                           type="button"
                           onClick={() => marcarListo(p.id)}
+                          disabled={procesandoId !== null}
                           className="px-4 py-2 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition-colors whitespace-nowrap"
                         >
                           Marcar listo
@@ -334,14 +275,6 @@ export default function ColaCocina() {
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-800 font-['Inter']">
                       {p.fin}
-                    </td>
-                    <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 bg-white border border-orange-600 text-orange-600 text-xs font-medium rounded hover:bg-orange-50 transition-colors whitespace-nowrap"
-                      >
-                        Registrar incidencia
-                      </button>
                     </td>
                   </tr>
                 ))

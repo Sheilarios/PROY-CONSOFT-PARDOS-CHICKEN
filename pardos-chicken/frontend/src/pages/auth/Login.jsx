@@ -1,6 +1,13 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-// import { authService } from "../api/authService";  // cuando tengas backend
+import { authService } from "../../api/authService";
+
+const ROLES = {
+  CAJERO: "cajero",
+  COCINERO: "cocinero",
+  DESPACHADOR: "despacho",
+  ADMINISTRADOR: "administrador",
+};
 
 // ----------------------------------------------------------------------
 // Mapeo de rol → ruta de inicio
@@ -9,7 +16,7 @@ const HOME_BY_ROL = {
   cajero: "/cajero/registrar-pedido",
   cocinero: "/cocinero/cola",
   despacho: "/despacho/panel",
-  administrador: "/admin/resumen",
+  administrador: "/admin/pedidos",
 };
 
 export default function Login() {
@@ -42,52 +49,21 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // ⚠️ SIMULACIÓN — cuando tengas backend, descomenta el bloque real:
-      //
-      // const { token, rol, nombre } = await authService.login(
-      //   form.email,
-      //   form.password
-      // );
-      //
-      // Para demo, simulamos según el email:
-      const demoUsers = {
-        "cajero@pardos.com": {
-          token: "demo-cajero",
-          rol: "cajero",
-          nombre: "Juan Pérez",
-        },
-        "cocinero@pardos.com": {
-          token: "demo-cocinero",
-          rol: "cocinero",
-          nombre: "María Cruz",
-        },
-        "despacho@pardos.com": {
-          token: "demo-despacho",
-          rol: "despacho",
-          nombre: "Carlos Rojas",
-        },
-        "admin@pardos.com": {
-          token: "demo-admin",
-          rol: "administrador",
-          nombre: "Andrea Salazar",
-        },
-      };
-
-      const user = demoUsers[form.email.toLowerCase()];
-      if (!user || form.password !== "123456") {
-        throw new Error("Credenciales inválidas. Usa 123456 como contraseña.");
-      }
-
-      // Guardar sesión
-      localStorage.setItem("access_token", user.token);
-      localStorage.setItem("rol", user.rol);
-      localStorage.setItem("user_nombre", user.nombre);
+      const tokens = await authService.iniciarSesion(form.email.trim(), form.password);
+      localStorage.setItem("access_token", tokens.access);
+      localStorage.setItem("refresh_token", tokens.refresh);
+      const usuario = await authService.usuarioActual();
+      const rol = ROLES[usuario.rol] || "cajero";
+      localStorage.setItem("rol", rol);
+      localStorage.setItem("user_nombre", usuario.nombre);
 
       // Redirigir a la ruta de origen (si venía de una protegida) o al home del rol
       const from = location.state?.from?.pathname;
-      navigate(from || HOME_BY_ROL[user.rol] || "/", { replace: true });
-    } catch (err) {
-      setError(err.message || "No se pudo iniciar sesión. Inténtalo de nuevo.");
+      navigate(from || HOME_BY_ROL[rol] || "/cajero/registrar-pedido", { replace: true });
+    } catch {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      setError("No se pudo iniciar sesión. Verifica tus credenciales y la conexión.");
     } finally {
       setLoading(false);
     }
@@ -174,14 +150,14 @@ export default function Login() {
               htmlFor="email"
               className="text-xs font-semibold text-slate-800 font-['Inter']"
             >
-              Usuario o correo
+              Usuario
             </label>
             <input
               id="email"
               name="email"
-              type="email"
+              type="text"
               autoComplete="username"
-              placeholder="cajero@pardos.com"
+              placeholder="Tu usuario"
               value={form.email}
               onChange={handleChange}
               disabled={loading}
@@ -231,20 +207,6 @@ export default function Login() {
             {loading ? "Ingresando..." : "Ingresar"}
           </button>
 
-          {/* Ayuda demo */}
-          <div className="bg-slate-50 border border-blue-100 rounded-md p-3 flex flex-col gap-1">
-            <span className="text-[10px] font-bold text-slate-800 font-['Inter'] uppercase">
-              Usuarios de prueba
-            </span>
-            <span className="text-[10px] text-slate-500 font-['Inter']">
-              cajero@pardos.com · cocinero@pardos.com · despacho@pardos.com ·
-              admin@pardos.com
-            </span>
-            <span className="text-[10px] text-slate-500 font-['Inter']">
-              Contraseña:{" "}
-              <span className="font-semibold text-slate-800">123456</span>
-            </span>
-          </div>
         </form>
       </div>
     </div>
