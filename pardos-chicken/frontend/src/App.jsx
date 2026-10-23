@@ -10,6 +10,7 @@ import {
 // LAYOUT
 // ----------------------------------------------------------------------
 import DashboardLayout from "./layouts/DashboardLayout";
+import RutaProtegida from "./components/RutaProtegida";
 
 // ----------------------------------------------------------------------
 // AUTENTICACIÓN
@@ -22,6 +23,7 @@ import Login from "./pages/auth/Login";
 import RegistrarPedido from "./pages/cajero/RegistrarPedido";
 import Clientes from "./pages/cajero/Clientes";
 import PedidoConfirmado from "./pages/cajero/PedidoConfirmado";
+import RegistrarIncidencia from "./pages/cajero/RegistrarIncidencia";
 
 // ----------------------------------------------------------------------
 // COCINERO
@@ -41,7 +43,6 @@ import Repartidores from "./pages/despacho/Repartidores";
 // ADMINISTRADOR
 // ----------------------------------------------------------------------
 import Resumen from "./pages/administrador/Resumen";
-import Produccion from "./pages/administrador/Produccion";
 import DetalleProduccion from "./pages/administrador/DetalleProduccion";
 import DespachoAdmin from "./pages/administrador/DespachoAdmin";
 import Historial from "./pages/administrador/Historial";
@@ -68,7 +69,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
 
         {/* ================= RUTAS PROTEGIDAS (Layout) ================= */}
-        <Route element={<DashboardLayout />}>
+        <Route element={<RutaProtegida><DashboardLayout /></RutaProtegida>}>
           {/* ------------------------------------------------- */}
           {/* CAJERO                                            */}
           {/* ------------------------------------------------- */}
@@ -80,6 +81,7 @@ export default function App() {
             path="/cajero/pedido-confirmado"
             element={<PedidoConfirmado />}
           />
+          <Route path="/cajero/incidencias/nueva" element={<RegistrarIncidencia />} />
           <Route path="/cajero/clientes" element={<Clientes />} />
           <Route path="/cajero/pedidos" element={<Pedidos />} />
           <Route path="/cajero/pedidos/detalle" element={<DetallePedido />} />
@@ -115,7 +117,7 @@ export default function App() {
           {/* ADMINISTRADOR                                     */}
           {/* ------------------------------------------------- */}
           <Route path="/admin/resumen" element={<Resumen />} />
-          <Route path="/admin/produccion" element={<Produccion />} />
+          <Route path="/admin/produccion" element={<ColaCocina />} />
           <Route
             path="/admin/produccion/detalle"
             element={<DetalleProduccion />}

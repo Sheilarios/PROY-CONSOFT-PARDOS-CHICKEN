@@ -28,13 +28,66 @@ class Producto(models.Model):
         return self.activo and self.stock_disponible >= cantidad
 
 
+class Insumo(models.Model):
+    """Material disponible para preparar productos de la carta."""
+
+    nombre = models.CharField(max_length=120, unique=True)
+    unidad = models.CharField(max_length=30, default="unidades")
+    stock_disponible = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Insumo"
+        verbose_name_plural = "Insumos"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.stock_disponible} {self.unidad})"
+
+
+class RecetaInsumo(models.Model):
+    """Cantidad de un insumo necesaria para una unidad de producto."""
+
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name="receta")
+    insumo = models.ForeignKey(Insumo, on_delete=models.PROTECT, related_name="recetas")
+    cantidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+
+    class Meta:
+        verbose_name = "Insumo de la receta"
+        verbose_name_plural = "Insumos de la receta"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["producto", "insumo"], name="receta_producto_insumo_unico"
+            )
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.producto.nombre}: {self.cantidad} {self.insumo.unidad} "
+            f"de {self.insumo.nombre}"
+        )
+
+
+class Cliente(models.Model):
+    """Cliente registrado para buscarlo por nombre en caja."""
+
+    nombre = models.CharField(max_length=120)
+    telefono = models.CharField(max_length=9, unique=True)
+
+    class Meta:
+        verbose_name = "Cliente"
+        verbose_name_plural = "Clientes"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class Pedido(models.Model):
     """
     Pedido registrado por caja (RF-01, RF-02, RF-03).
 
-    RN-03: cada pedido transita secuencialmente por los estados definidos
-    en ESTADOS_ORDEN. La validación de esa transición se hace en
-    apps/pedidos/validators.py (programación defensiva).
+    RN-03: la producción avanza secuencialmente por ESTADOS_ORDEN.
+    Una incidencia registrada por caja cierra el pedido antes de prepararlo.
     """
 
     class ModalidadEntrega(models.TextChoices):
@@ -48,8 +101,9 @@ class Pedido(models.Model):
         EN_PREPARACION = "EN_PREPARACION", "En preparación"
         LISTO = "LISTO", "Listo"
         DESPACHADO = "DESPACHADO", "Despachado"
+        CANCELADO = "CANCELADO", "Cancelado"
 
-    # Orden estricto de transición (RN-03/RN-04). Se usa desde validators.py.
+    # CANCELADO es un estado final y no forma parte del avance de producción.
     ESTADOS_ORDEN = [
         Estado.REGISTRADO,
         Estado.EN_COLA,
@@ -59,9 +113,13 @@ class Pedido(models.Model):
     ]
 
     codigo = models.CharField(max_length=12, unique=True, editable=False)
+    cliente = models.ForeignKey(
+        Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name="pedidos"
+    )
     cliente_nombre = models.CharField(max_length=120, blank=True)
     cliente_telefono = models.CharField(max_length=9, blank=True)
     direccion_delivery = models.CharField(max_length=200, blank=True)
+    observaciones = models.CharField(max_length=500, blank=True, default="")
 
     modalidad_entrega = models.CharField(max_length=10, choices=ModalidadEntrega.choices)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.REGISTRADO)
@@ -135,16 +193,16 @@ class DetallePedido(models.Model):
 
 
 class Incidencia(models.Model):
-    """
-    Modelo base para el Incremento 4 (RF-10), se deja definido desde ahora
-    porque el diagrama de clases del proyecto ya lo contempla.
-    """
+    """Problema de un pedido registrado por el personal de caja."""
 
     class Tipo(models.TextChoices):
         DEMORA = "DEMORA", "Demora"
         CANCELACION = "CANCELACION", "Cancelación"
         ERROR = "ERROR", "Error en el pedido"
         DEVOLUCION = "DEVOLUCION", "Devolución"
+        ERROR_PRODUCTOS = "ERROR_PRODUCTOS", "Producto o cantidad incorrectos"
+        ERROR_MODALIDAD = "ERROR_MODALIDAD", "Modalidad de entrega incorrecta"
+        ERROR_CLIENTE = "ERROR_CLIENTE", "Datos del cliente incorrectos"
 
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="incidencias")
     tipo = models.CharField(max_length=20, choices=Tipo.choices)

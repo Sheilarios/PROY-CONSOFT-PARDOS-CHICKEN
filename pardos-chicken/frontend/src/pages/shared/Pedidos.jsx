@@ -1,75 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { pedidosService } from "../../api/pedidosService";
 
-// ----------------------------------------------------------------------
-// Datos de ejemplo (luego vendrán del backend)
-// ----------------------------------------------------------------------
-const PEDIDOS_INICIALES = [
-  {
-    id: "#P0012",
-    hora: "11:25",
-    cliente: "Cliente mostrador",
-    modalidad: "Delivery",
-    productos: "1/2 Pollo, Papas familiares, Gaseosa 1.5 L",
-    total: 54.0,
-    estado: "En cola",
-  },
-  {
-    id: "#P0010",
-    hora: "11:30",
-    cliente: "Cliente frecuente",
-    modalidad: "Recojo",
-    productos: "1 Pollo entero, Papas familiares",
-    total: 42.0,
-    estado: "En cola",
-  },
-  {
-    id: "#P0008",
-    hora: "11:32",
-    cliente: "Cliente mostrador",
-    modalidad: "Salón",
-    productos: "1/4 Pollo, Ensalada, Gaseosa",
-    total: 54.0,
-    estado: "En preparación",
-  },
-  {
-    id: "#P0011",
-    hora: "11:40",
-    cliente: "Cliente frecuente",
-    modalidad: "Delivery",
-    productos: "1 Pollo entero, Papas, Ensalada",
-    total: 42.0,
-    estado: "En preparación",
-  },
-  {
-    id: "#P0013",
-    hora: "11:48",
-    cliente: "Cliente mostrador",
-    modalidad: "Salón",
-    productos: "1/4 Pollo, Papas familiares",
-    total: 54.0,
-    estado: "En preparación",
-  },
-  {
-    id: "#P0014",
-    hora: "11:50",
-    cliente: "Cliente frecuente",
-    modalidad: "Delivery",
-    productos: "1 Pollo entero, Gaseosa 1.5 L",
-    total: 42.0,
-    estado: "Listo",
-  },
-  {
-    id: "#P0015",
-    hora: "11:52",
-    cliente: "Cliente mostrador",
-    modalidad: "Recojo",
-    productos: "1/2 Pollo, Ensalada, Papas",
-    total: 54.0,
-    estado: "Listo",
-  },
-];
 
 // ----------------------------------------------------------------------
 // Estilos
@@ -81,6 +13,7 @@ const MODALIDAD_STYLES = {
 };
 
 const ESTADO_STYLES = {
+  Registrado: "bg-slate-100 text-slate-800",
   "En cola": "bg-rose-50 text-rose-700",
   "En preparación": "bg-indigo-50 text-blue-800",
   Listo: "bg-green-100 text-green-700",
@@ -134,23 +67,63 @@ export default function Pedidos() {
   const [filtroEstado, setFiltroEstado] = useState("Todos");
   const [filtroModalidad, setFiltroModalidad] = useState("Todas");
   const [busqueda, setBusqueda] = useState("");
+  const [pedidos, setPedidos] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [procesandoId, setProcesandoId] = useState(null);
+  const [error, setError] = useState("");
+
+  const cargarPedidos = useCallback(async () => {
+    setCargando(true);
+    setError("");
+    try {
+      const respuesta = await pedidosService.listar();
+      const lista = respuesta.results || respuesta;
+      const modalidades = { SALON: "Salón", DELIVERY: "Delivery", RECOJO: "Recojo" };
+      const estados = { REGISTRADO: "Registrado", EN_COLA: "En cola", EN_PREPARACION: "En preparación", LISTO: "Listo", DESPACHADO: "Despachado", CANCELADO: "Cancelado" };
+      setPedidos(lista.map((p) => ({
+        id: p.id,
+        codigo: p.codigo,
+        hora: new Date(p.fecha_creacion).toLocaleString("es-PE"),
+        cliente: p.cliente_nombre || "—",
+        modalidad: modalidades[p.modalidad_entrega] || p.modalidad_entrega,
+        productos: p.detalles.map((d) => `${d.cantidad} × ${d.producto_nombre}`).join(", "),
+        total: Number(p.total),
+        estado: estados[p.estado] || p.estado,
+        estadoCodigo: p.estado,
+      })));
+    } catch {
+      setError("No se pudieron cargar los pedidos.");
+      setPedidos([]);
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => { cargarPedidos(); }, [cargarPedidos, filtroEstado]);
+
+  useEffect(() => {
+    window.addEventListener("focus", cargarPedidos);
+    return () => window.removeEventListener("focus", cargarPedidos);
+  }, [cargarPedidos]);
 
   // ---------- Contadores ----------
   const stats = useMemo(() => {
-    const total = PEDIDOS_INICIALES.length;
-    const pendientes = PEDIDOS_INICIALES.filter(
+    const total = pedidos.length;
+    const registrados = pedidos.filter((p) => p.estado === "Registrado").length;
+    const pendientes = pedidos.filter(
       (p) => p.estado === "En cola",
     ).length;
-    const enPrep = PEDIDOS_INICIALES.filter(
+    const enPrep = pedidos.filter(
       (p) => p.estado === "En preparación",
     ).length;
-    const listos = PEDIDOS_INICIALES.filter((p) => p.estado === "Listo").length;
-    return { total, pendientes, enPrep, listos };
-  }, []);
+    const listos = pedidos.filter((p) => p.estado === "Listo").length;
+    const cancelados = pedidos.filter((p) => p.estado === "Cancelado").length;
+    return { total, registrados, pendientes, enPrep, listos, cancelados };
+  }, [pedidos]);
 
   // ---------- Filtrado ----------
   const pedidosFiltrados = useMemo(() => {
-    return PEDIDOS_INICIALES.filter((p) => {
+    return pedidos.filter((p) => {
       const okEstado =
         filtroEstado === "Todos" ? true : p.estado === filtroEstado;
       const okModalidad =
@@ -158,12 +131,12 @@ export default function Pedidos() {
       const q = busqueda.trim().toLowerCase();
       const okBusqueda = !q
         ? true
-        : p.id.toLowerCase().includes(q) ||
+        : p.codigo.toLowerCase().includes(q) ||
           p.cliente.toLowerCase().includes(q) ||
           p.productos.toLowerCase().includes(q);
       return okEstado && okModalidad && okBusqueda;
     });
-  }, [filtroEstado, filtroModalidad, busqueda]);
+  }, [pedidos, filtroEstado, filtroModalidad, busqueda]);
 
   // ---------- Acciones ----------
   const verDetalle = (id) => {
@@ -174,6 +147,27 @@ export default function Pedidos() {
       administrador: "/admin/pedidos/detalle",
     };
     navigate(`${baseByRol[rol]}?id=${encodeURIComponent(id)}`);
+  };
+
+  const enviarAProduccion = async (id) => {
+    setProcesandoId(id);
+    setError("");
+    try {
+      const pedidoActual = await pedidosService.obtenerPedido(id);
+      if (pedidoActual.estado !== "REGISTRADO") {
+        await cargarPedidos();
+        setError("Este pedido ya no está registrado. Se actualizó la lista.");
+        return;
+      }
+      await pedidosService.enviarAProduccion(id);
+      await cargarPedidos();
+    } catch (err) {
+      const estado = err.response?.data?.estado;
+      await cargarPedidos();
+      setError(Array.isArray(estado) ? estado[0] : "No se pudo enviar el pedido a cocina.");
+    } finally {
+      setProcesandoId(null);
+    }
   };
 
   return (
@@ -188,17 +182,25 @@ export default function Pedidos() {
         </p>
       </div>
 
+      {cargando && <p className="text-xs text-slate-500">Cargando pedidos...</p>}
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+      <button type="button" onClick={cargarPedidos} disabled={cargando || procesandoId !== null} className="self-start px-4 py-2 rounded-md bg-orange-600 text-white text-xs font-semibold">
+        Actualizar pedidos
+      </button>
+
       {/* ---------- Filtros de estado + modalidad ---------- */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {[
             { label: `Todos (${stats.total})`, valor: "Todos" },
-            { label: `Pendientes (${stats.pendientes})`, valor: "En cola" },
+            { label: `Registrados (${stats.registrados})`, valor: "Registrado" },
+            { label: `En cola (${stats.pendientes})`, valor: "En cola" },
             {
               label: `En preparación (${stats.enPrep})`,
               valor: "En preparación",
             },
             { label: `Listos (${stats.listos})`, valor: "Listo" },
+            { label: `Cancelados (${stats.cancelados})`, valor: "Cancelado" },
           ].map((f) => {
             const active = filtroEstado === f.valor;
             return (
@@ -286,7 +288,7 @@ export default function Pedidos() {
                     className="border-t border-slate-200 hover:bg-slate-50"
                   >
                     <td className="px-3 py-3 text-xs font-semibold text-slate-800 font-['Inter']">
-                      {p.id}
+                      {p.codigo}
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-800 font-['Inter']">
                       {p.hora}
@@ -321,6 +323,11 @@ export default function Pedidos() {
                       </span>
                     </td>
                     <td className="px-3 py-3">
+                      {p.estadoCodigo === "REGISTRADO" && (
+                        <button type="button" onClick={() => enviarAProduccion(p.id)} disabled={cargando || procesandoId !== null} className="mr-2 px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded disabled:opacity-50">
+                          Enviar a cocina
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => verDetalle(p.id)}

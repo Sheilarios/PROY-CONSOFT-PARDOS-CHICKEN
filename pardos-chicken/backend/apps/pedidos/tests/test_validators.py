@@ -31,21 +31,33 @@ class TestValidarDireccionDelivery:
         validators.validar_direccion_delivery("SALON", "")
 
 
-@pytest.mark.django_db
 class TestValidarStockDeDetalles:
     def test_stock_suficiente_para_todos_los_productos(self):
-        p1 = Producto.objects.create(nombre="Pollo entero", precio_unitario=65, stock_disponible=5)
-        p2 = Producto.objects.create(nombre="Papas", precio_unitario=12, stock_disponible=10)
-        validators.validar_stock_de_detalles([(p1, 2), (p2, 3)])  # no debe lanzar excepción
+        pollo = Producto(nombre="Pollo entero", precio_unitario=65, stock_disponible=5)
+        papas = Producto(nombre="Papas", precio_unitario=12, stock_disponible=10)
+
+        validators.validar_stock_de_detalles([(pollo, 5), (papas, 3)])
+
+        assert pollo.stock_disponible == 5
+        assert papas.stock_disponible == 10
 
     def test_producto_agotado_lanza_error_con_nombre_del_producto(self):
-        agotado = Producto.objects.create(
-            nombre="Alitas BBQ", precio_unitario=20, stock_disponible=0
-        )
+        agotado = Producto(nombre="Alitas BBQ", precio_unitario=20, stock_disponible=0)
         with pytest.raises(ValidationError) as excinfo:
             validators.validar_stock_de_detalles([(agotado, 1)])
 
         assert "Alitas BBQ" in str(excinfo.value)
+
+    def test_un_producto_sin_stock_rechaza_todo_el_pedido_sin_descontar(self):
+        pollo = Producto(nombre="Pollo", precio_unitario=65, stock_disponible=5)
+        papas = Producto(nombre="Papas", precio_unitario=12, stock_disponible=2)
+
+        with pytest.raises(ValidationError) as excinfo:
+            validators.validar_stock_de_detalles([(pollo, 2), (papas, 3)])
+
+        assert "Papas" in str(excinfo.value)
+        assert pollo.stock_disponible == 5
+        assert papas.stock_disponible == 2
 
 
 class TestValidarTransicionEstado:
@@ -64,4 +76,16 @@ class TestValidarTransicionEstado:
         with pytest.raises(ValidationError):
             validators.validar_transicion_estado(
                 Pedido.Estado.LISTO, Pedido.Estado.EN_COLA, Pedido.ESTADOS_ORDEN
+            )
+
+    def test_repetir_el_mismo_estado_lanza_error(self):
+        with pytest.raises(ValidationError):
+            validators.validar_transicion_estado(
+                Pedido.Estado.EN_COLA, Pedido.Estado.EN_COLA, Pedido.ESTADOS_ORDEN
+            )
+
+    def test_estado_desconocido_lanza_error(self):
+        with pytest.raises(ValidationError):
+            validators.validar_transicion_estado(
+                Pedido.Estado.EN_COLA, "DESCONOCIDO", Pedido.ESTADOS_ORDEN
             )

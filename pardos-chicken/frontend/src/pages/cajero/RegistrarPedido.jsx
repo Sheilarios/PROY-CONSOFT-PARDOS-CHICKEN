@@ -1,24 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pedidosService } from "../../api/pedidosService";
-
-// ----------------------------------------------------------------------
-// Catálogo de productos (luego vendrá del backend)
-// ----------------------------------------------------------------------
-const PRODUCTOS = [
-  {
-    id: 1,
-    icono: "🍗",
-    nombre: "1/2 Pollo a la brasa",
-    precio: 32.0,
-    stock: 18,
-  },
-  { id: 2, icono: "🍟", nombre: "Papas familiares", precio: 12.0, stock: 24 },
-  { id: 3, icono: "🥗", nombre: "Ensalada", precio: 8.0, stock: 4 },
-  { id: 4, icono: "🥤", nombre: "Gaseosa 1.5 L", precio: 10.0, stock: 16 },
-  { id: 5, icono: "🍗", nombre: "Pollo entero", precio: 42.0, stock: 8 },
-  { id: 6, icono: "🧂", nombre: "Salsas extra", precio: 3.0, stock: 30 },
-];
+import imagenCuartoPollo from "../../assets/productos/cuarto-pollo.png";
+import imagenPolloEntero from "../../assets/productos/pollo-entero.png";
+import imagenPapasFritas from "../../assets/productos/papas-fritas.png";
+import imagenGaseosa from "../../assets/productos/gaseosa-1-5l.png";
 
 const MODALIDADES = [
   { id: "salon", label: "Salón", icono: "🍽️" },
@@ -31,6 +17,15 @@ const MODALIDADES = [
 // ----------------------------------------------------------------------
 const formatSoles = (n) => `S/ ${n.toFixed(2)}`;
 
+const imagenDeProducto = (nombre) => {
+  const nombreMinusculas = nombre.toLowerCase();
+  if (nombreMinusculas.includes("1/4 pollo")) return imagenCuartoPollo;
+  if (nombreMinusculas.includes("pollo entero")) return imagenPolloEntero;
+  if (nombreMinusculas.includes("papas fritas")) return imagenPapasFritas;
+  if (nombreMinusculas.includes("gaseosa 1.5")) return imagenGaseosa;
+  return null;
+};
+
 const stockBadge = (stock) => {
   if (stock === 0)
     return { label: "Sin stock", clase: "bg-red-100 text-red-700" };
@@ -39,11 +34,21 @@ const stockBadge = (stock) => {
   return { label: "Disponible", clase: "bg-green-100 text-green-800" };
 };
 
+const mensajeDeError = (error) => {
+  const datos = error.response?.data;
+  const primero = datos && typeof datos === "object" ? Object.values(datos)[0] : null;
+  return Array.isArray(primero) ? primero.join(" ") : primero || "No se pudo registrar el pedido.";
+};
+
 // ----------------------------------------------------------------------
 // Componente
 // ----------------------------------------------------------------------
 export default function RegistrarPedido() {
   const navigate = useNavigate();
+  const [productos, setProductos] = useState([]);
+  const [clienteId, setClienteId] = useState(null);
+  const [clientesEncontrados, setClientesEncontrados] = useState([]);
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
 
   // Datos del cliente
   const [cliente, setCliente] = useState({
@@ -51,8 +56,8 @@ export default function RegistrarPedido() {
     telefono: "",
     modalidad: "salon",
     direccion: "",
-    observaciones: "",
   });
+  const [observaciones, setObservaciones] = useState("");
 
   // Carrito: { [productoId]: cantidad }
   const [carrito, setCarrito] = useState({});
@@ -64,18 +69,30 @@ export default function RegistrarPedido() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    pedidosService.listarProductos()
+      .then((lista) => setProductos(lista.map((p) => ({
+        id: p.id,
+        imagen: imagenDeProducto(p.nombre),
+        nombre: p.nombre,
+        precio: Number(p.precio_unitario),
+        stock: p.stock_disponible,
+      }))))
+      .catch(() => setError("No se pudo cargar el catálogo de productos."));
+  }, []);
+
   // ---------- Productos filtrados ----------
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return PRODUCTOS;
-    return PRODUCTOS.filter((p) => p.nombre.toLowerCase().includes(q));
-  }, [busqueda]);
+    if (!q) return productos;
+    return productos.filter((p) => p.nombre.toLowerCase().includes(q));
+  }, [busqueda, productos]);
 
   // ---------- Carrito en formato array ----------
   const carritoItems = useMemo(() => {
     return Object.entries(carrito)
       .map(([id, cantidad]) => {
-        const producto = PRODUCTOS.find((p) => p.id === Number(id));
+        const producto = productos.find((p) => p.id === Number(id));
         if (!producto) return null;
         return {
           ...producto,
@@ -84,7 +101,7 @@ export default function RegistrarPedido() {
         };
       })
       .filter(Boolean);
-  }, [carrito]);
+  }, [carrito, productos]);
 
   const total = useMemo(
     () => carritoItems.reduce((acc, item) => acc + item.subtotal, 0),
@@ -99,13 +116,43 @@ export default function RegistrarPedido() {
   // ---------- Handlers ----------
   const handleChangeCliente = (e) => {
     setCliente({ ...cliente, [e.target.name]: e.target.value });
+    if (e.target.name === "nombre" || e.target.name === "telefono") {
+      setClienteId(null);
+      setClientesEncontrados([]);
+    }
     if (error) setError(null);
+  };
+
+  const buscarCliente = async () => {
+    setError(null);
+    setBuscandoCliente(true);
+    setClientesEncontrados([]);
+    try {
+      const resultados = await pedidosService.buscarClientesPorNombre(cliente.nombre);
+      setClientesEncontrados(resultados);
+    } catch (err) {
+      setError(mensajeDeError(err));
+    } finally {
+      setBuscandoCliente(false);
+    }
+  };
+
+  const seleccionarCliente = (encontrado) => {
+    setCliente((actual) => ({
+      ...actual,
+      nombre: encontrado.nombre,
+      telefono: encontrado.telefono || "",
+    }));
+    setClienteId(encontrado.id);
+    setClientesEncontrados([]);
+    setError(null);
   };
 
   const cambiarCantidad = (productoId, delta) => {
     setCarrito((prev) => {
       const actual = prev[productoId] || 0;
-      const producto = PRODUCTOS.find((p) => p.id === productoId);
+      const producto = productos.find((p) => p.id === productoId);
+      if (!producto) return prev;
       const nueva = Math.max(0, Math.min(producto.stock, actual + delta));
       const copia = { ...prev };
       if (nueva === 0) {
@@ -118,7 +165,8 @@ export default function RegistrarPedido() {
   };
 
   const agregarAlCarrito = (productoId) => {
-    const producto = PRODUCTOS.find((p) => p.id === productoId);
+    const producto = productos.find((p) => p.id === productoId);
+    if (!producto) return;
     if (producto.stock === 0) {
       setError(`"${producto.nombre}" no tiene stock disponible.`);
       return;
@@ -149,9 +197,11 @@ export default function RegistrarPedido() {
       telefono: "",
       modalidad: "salon",
       direccion: "",
-      observaciones: "",
     });
     setCarrito({});
+    setObservaciones("");
+    setClienteId(null);
+    setClientesEncontrados([]);
     setBusqueda("");
     setError(null);
   };
@@ -179,42 +229,35 @@ export default function RegistrarPedido() {
 
     try {
       const payload = {
-        cliente: {
-          nombre: cliente.nombre,
-          telefono: cliente.telefono,
-          direccion: cliente.direccion || null,
-        },
-        modalidad: cliente.modalidad,
-        observaciones: cliente.observaciones,
-        productos: carritoItems.map((item) => ({
+        cliente_nombre: cliente.nombre.trim(),
+        cliente_telefono: cliente.telefono.trim(),
+        modalidad_entrega: cliente.modalidad.toUpperCase(),
+        direccion_delivery: cliente.modalidad === "delivery" ? cliente.direccion.trim() : "",
+        observaciones: observaciones.trim(),
+        ...(clienteId ? { cliente_id: clienteId } : {}),
+        detalles: carritoItems.map((item) => ({
           producto_id: item.id,
           cantidad: item.cantidad,
-          precio_unitario: item.precio,
         })),
-        total,
       };
-
-      // ⚠️ Simulación — cuando tengas backend:
-      // const pedidoCreado = await pedidosService.registrarPedido(payload);
+      const respuesta = await pedidosService.registrarPedido(payload);
       const pedidoCreado = {
-        ...payload,
-        id: `#P${String(Math.floor(Math.random() * 9000) + 1000)}`,
-        hora: new Date().toLocaleTimeString("es-PE", {
-          hour: "2-digit",
-          minute: "2-digit",
+        id: respuesta.codigo,
+        pedidoId: respuesta.id,
+        hora: new Date(respuesta.fecha_creacion).toLocaleTimeString("es-PE", {
+          hour: "2-digit", minute: "2-digit",
         }),
+        modalidad: MODALIDADES.find((m) => m.id === cliente.modalidad)?.label,
+        total: Number(respuesta.total),
         cantidadArticulos: totalArticulos,
+        checks: ["Datos guardados", "Stock validado"],
       };
 
       navigate("/cajero/pedido-confirmado", {
         state: { pedido: pedidoCreado },
       });
     } catch (err) {
-      setError(
-        err?.response?.data?.detail ||
-          err.message ||
-          "No se pudo registrar el pedido.",
-      );
+      setError(mensajeDeError(err));
     } finally {
       setEnviando(false);
     }
@@ -289,7 +332,9 @@ export default function RegistrarPedido() {
                   id="telefono"
                   name="telefono"
                   type="tel"
-                  placeholder="987 654 321"
+                  placeholder="9XXXXXXXX"
+                  maxLength={9}
+                  inputMode="numeric"
                   value={cliente.telefono}
                   onChange={handleChangeCliente}
                   disabled={enviando}
@@ -297,6 +342,32 @@ export default function RegistrarPedido() {
                 />
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={buscarCliente}
+              disabled={buscandoCliente || enviando}
+              className="h-9 px-3 rounded-md bg-orange-50 border border-orange-600 text-orange-600 text-xs font-semibold"
+            >
+              {buscandoCliente ? "Buscando..." : "Buscar por nombre"}
+            </button>
+            <p className="text-xs text-slate-500">
+              Si es nuevo, escribe nombre y teléfono. Se guardará junto con el pedido.
+            </p>
+            {clientesEncontrados.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {clientesEncontrados.map((encontrado, indice) => (
+                  <button
+                    key={`${encontrado.id || "historial"}-${indice}`}
+                    type="button"
+                    onClick={() => seleccionarCliente(encontrado)}
+                    className="text-left px-3 py-2 rounded-md border border-slate-200 text-xs text-slate-800 hover:bg-orange-50"
+                  >
+                    {encontrado.nombre} · {encontrado.telefono || "Sin teléfono"} · {encontrado.origen === "historial" ? "Pedido anterior" : "Registrado"}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Modalidad */}
             <div className="flex flex-col gap-2">
@@ -349,7 +420,6 @@ export default function RegistrarPedido() {
               </div>
             )}
 
-            {/* Observaciones */}
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="observaciones"
@@ -360,14 +430,16 @@ export default function RegistrarPedido() {
               <textarea
                 id="observaciones"
                 name="observaciones"
-                rows="3"
+                rows={3}
+                maxLength={500}
                 placeholder="Ej. Sin salsas, extra papas, etc."
-                value={cliente.observaciones}
-                onChange={handleChangeCliente}
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
                 disabled={enviando}
-                className="px-3 py-2 rounded-md border border-slate-200 text-xs text-slate-800 outline-none focus:border-orange-500 disabled:bg-slate-50 resize-none"
+                className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs text-slate-800 outline-none focus:border-orange-500 disabled:bg-slate-50 resize-y"
               />
             </div>
+
           </div>
         </div>
 
@@ -410,10 +482,14 @@ export default function RegistrarPedido() {
                       key={p.id}
                       className="border border-slate-200 rounded-md p-2.5 flex items-center gap-2"
                     >
-                      {/* Icono + nombre */}
+                      {/* Imagen + nombre */}
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="w-10 h-10 bg-slate-50 rounded-md flex items-center justify-center text-lg shrink-0">
-                          {p.icono}
+                        <div className="w-10 h-10 bg-slate-50 rounded-md flex items-center justify-center overflow-hidden shrink-0">
+                          {p.imagen ? (
+                            <img src={p.imagen} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-lg font-semibold text-slate-500">{p.nombre.charAt(0)}</span>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
                           <span className="text-xs font-semibold text-slate-800 font-['Inter'] truncate">

@@ -1,0 +1,49 @@
+[
+  {
+    "model": "pedidos.insumo",
+    "pk": 1,
+    "fields": {
+      "nombre": "Pollo crudo",
+      "unidad": "cuartos",
+      "stock_disponible": 100
+    }
+  },
+  {
+    "model": "pedidos.insumo",
+    "pk": 2,
+    "fields": {
+      "nombre": "Papas para freír",
+      "unidad": "porciones",
+      "stock_disponible": 100
+    }
+  },
+  {
+    "model": "pedidos.insumo",
+    "pk": 3,
+    "fields": {
+      "nombre": "Bebida 1.5L",
+      "unidad": "botellas",
+      "stock_disponible": 100
+    }
+  },
+  {
+    "model": "pedidos.recetainsumo",
+    "pk": 1,
+    "fields": { "producto": 1, "insumo": 1, "cantidad": 1 }
+  },
+  {
+    "model": "pedidos.recetainsumo",
+    "pk": 2,
+    "fields": { "producto": 2, "insumo": 1, "cantidad": 4 }
+  },
+  {
+    "model": "pedidos.recetainsumo",
+    "pk": 3,
+    "fields": { "producto": 3, "insumo": 2, "cantidad": 1 }
+  },
+  {
+    "model": "pedidos.recetainsumo",
+    "pk": 4,
+    "fields": { "producto": 4, "insumo": 3, "cantidad": 1 }
+  }
+]

@@ -1,20 +1,47 @@
-// src/api/pedidosService.js
+// API de pedidos, producción e incidencias.
 import axiosClient from "./axiosClient";
 
 export const pedidosService = {
+  listarProductos: () =>
+    axiosClient.get("/pedidos/productos/").then((r) => r.data.results || r.data),
+
+  buscarClientesPorNombre: (nombre) =>
+    axiosClient.get("/pedidos/clientes/buscar-por-nombre/", { params: { nombre } }).then((r) => r.data),
+
+  listarClientes: () =>
+    axiosClient.get("/pedidos/clientes/").then((r) => r.data.results || r.data),
+
   listar: (params = {}) =>
     axiosClient.get("/pedidos/", { params }).then((r) => r.data),
+
+  listarColaProduccion: () =>
+    axiosClient.get("/pedidos/cola-produccion/").then((r) => r.data),
+
+  listarSeguimientoProduccion: () =>
+    axiosClient.get("/pedidos/seguimiento-produccion/").then((r) => r.data),
 
   obtenerPedido: (id) => axiosClient.get(`/pedidos/${id}/`).then((r) => r.data),
 
   registrarPedido: (payload) =>
     axiosClient.post("/pedidos/", payload).then((r) => r.data),
 
+  registrarIncidencia: (payload) =>
+    axiosClient.post("/pedidos/incidencias/", payload).then((r) => r.data),
+
+  listarIncidencias: () =>
+    axiosClient.get("/pedidos/incidencias/").then((r) => r.data.results || r.data),
+
   actualizarProducto: (id, payload) =>
     axiosClient.put(`/pedidos/productos/${id}/`, payload).then((r) => r.data),
 
   enviarAProduccion: (id) =>
     axiosClient.post(`/pedidos/${id}/enviar-a-produccion/`).then((r) => r.data),
+
+  iniciarPreparacion: (id) =>
+    axiosClient.post(`/pedidos/${id}/iniciar-preparacion/`).then((r) => r.data),
+
+  marcarListo: (id) =>
+    axiosClient.post(`/pedidos/${id}/marcar-listo/`).then((r) => r.data),
 
   marcarComoPreparado: (id) =>
     axiosClient.post(`/pedidos/${id}/marcar-preparado/`).then((r) => r.data),
