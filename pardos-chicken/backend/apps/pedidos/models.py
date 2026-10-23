@@ -8,6 +8,7 @@ class Producto(models.Model):
     """Catálogo de productos vendidos por el local (pollo a la brasa y afines)."""
 
     nombre = models.CharField(max_length=120)
+    imagen = models.ImageField(upload_to="productos/", blank=True)
     precio_unitario = models.DecimalField(max_digits=8, decimal_places=2)
     stock_disponible = models.PositiveIntegerField(default=0)
     tiempo_preparacion_minutos = models.PositiveSmallIntegerField(
@@ -213,3 +214,19 @@ class Incidencia(models.Model):
     class Meta:
         verbose_name = "Incidencia"
         verbose_name_plural = "Incidencias"
+
+
+class EdicionPedido(models.Model):
+    """Registro de una modificación hecha en caja antes de la preparación."""
+
+    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="ediciones")
+    modificado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    fecha = models.DateTimeField(auto_now_add=True)
+    descripcion = models.TextField()
+    total_anterior = models.DecimalField(max_digits=10, decimal_places=2)
+    total_nuevo = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        verbose_name = "Edición de pedido"
+        verbose_name_plural = "Ediciones de pedidos"
+        ordering = ["-fecha", "-id"]

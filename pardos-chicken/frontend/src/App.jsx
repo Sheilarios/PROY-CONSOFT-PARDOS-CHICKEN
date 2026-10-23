@@ -24,6 +24,7 @@ import RegistrarPedido from "./pages/cajero/RegistrarPedido";
 import Clientes from "./pages/cajero/Clientes";
 import PedidoConfirmado from "./pages/cajero/PedidoConfirmado";
 import RegistrarIncidencia from "./pages/cajero/RegistrarIncidencia";
+import EditarPedido from "./pages/cajero/EditarPedido";
 
 // ----------------------------------------------------------------------
 // COCINERO
@@ -82,6 +83,7 @@ export default function App() {
             element={<PedidoConfirmado />}
           />
           <Route path="/cajero/incidencias/nueva" element={<RegistrarIncidencia />} />
+          <Route path="/cajero/pedidos/editar" element={<EditarPedido />} />
           <Route path="/cajero/clientes" element={<Clientes />} />
           <Route path="/cajero/pedidos" element={<Pedidos />} />
           <Route path="/cajero/pedidos/detalle" element={<DetallePedido />} />

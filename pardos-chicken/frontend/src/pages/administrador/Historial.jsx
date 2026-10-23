@@ -51,7 +51,7 @@ function fechaLocal(valor) {
   return anio + "-" + mes + "-" + dia;
 }
 
-function crearRegistros(pedidos, incidencias) {
+function crearRegistros(pedidos, incidencias, ediciones) {
   const registros = [];
 
   pedidos.forEach((pedido) => {
@@ -74,8 +74,9 @@ function crearRegistros(pedidos, incidencias) {
       registros.push({
         ...base,
         clave: "observacion-" + pedido.id,
+        fecha: pedido.fecha_actualizacion || pedido.fecha_creacion,
         tipo: "Observación",
-        descripcion: pedido.observaciones,
+        descripcion: "Observación actual: " + pedido.observaciones,
       });
     }
   });
@@ -96,12 +97,30 @@ function crearRegistros(pedidos, incidencias) {
     });
   });
 
+  ediciones.forEach((edicion) => {
+    registros.push({
+      clave: "edicion-" + edicion.id,
+      pedidoId: edicion.pedido_id,
+      codigo: edicion.pedido_codigo,
+      fecha: edicion.fecha,
+      area: "Caja",
+      tipo: "Edición",
+      usuario: edicion.modificado_por_nombre,
+      descripcion: edicion.descripcion,
+      estado: ESTADOS[edicion.pedido_estado] || edicion.pedido_estado,
+      cliente: edicion.pedido_cliente || "Sin nombre",
+      totalAnterior: edicion.total_anterior,
+      totalNuevo: edicion.total_nuevo,
+    });
+  });
+
   return registros.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 }
 
 export default function Historial() {
   const [pedidos, setPedidos] = useState([]);
   const [incidencias, setIncidencias] = useState([]);
+  const [ediciones, setEdiciones] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [seleccionado, setSeleccionado] = useState(null);
@@ -113,11 +132,13 @@ export default function Historial() {
     setCargando(true);
     setError("");
     try {
-      const [respuestaPedidos, respuestaIncidencias] = await Promise.all([
+      const [respuestaPedidos, respuestaIncidencias, respuestaEdiciones] = await Promise.all([
         pedidosService.listar(), pedidosService.listarIncidencias(),
+        pedidosService.listarEdiciones(),
       ]);
       setPedidos(respuestaPedidos.results || respuestaPedidos);
       setIncidencias(respuestaIncidencias);
+      setEdiciones(respuestaEdiciones);
     } catch {
       setError("No se pudo cargar el historial.");
     } finally {
@@ -128,7 +149,7 @@ export default function Historial() {
   useEffect(() => { cargarHistorial(); }, [cargarHistorial]);
 
   const registros = useMemo(
-    () => crearRegistros(pedidos, incidencias), [pedidos, incidencias],
+    () => crearRegistros(pedidos, incidencias, ediciones), [pedidos, incidencias, ediciones],
   );
 
   const registrosFiltrados = useMemo(() => registros.filter((registro) => {
@@ -152,7 +173,7 @@ export default function Historial() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Historial</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Pedidos, observaciones e incidencias guardadas en el sistema.
+            Pedidos, observaciones, ediciones e incidencias guardadas en el sistema.
           </p>
         </div>
         <button
@@ -167,10 +188,11 @@ export default function Historial() {
 
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard label="Registros de hoy" valor={registrosHoy} />
         <StatCard label="Pedidos registrados" valor={pedidos.length} />
         <StatCard label="Incidencias registradas" valor={incidencias.length} />
+        <StatCard label="Ediciones registradas" valor={ediciones.length} />
         <StatCard
           label="Último registro"
           valor={registros.length ? formatearFecha(registros[0].fecha) : "—"}
@@ -204,7 +226,7 @@ export default function Historial() {
           <FiltroSelect
             label="Tipo de registro"
             value={filtros.tipo}
-            options={["Todos", "Registro", "Observación", "Incidencia"]}
+            options={["Todos", "Registro", "Observación", "Edición", "Incidencia"]}
             onChange={(valor) => setFiltros({ ...filtros, tipo: valor })}
           />
           <label className="flex flex-col gap-1 text-xs text-slate-500">
@@ -269,13 +291,13 @@ export default function Historial() {
                       </Badge>
                     </td>
                     <td className="px-3 py-3 text-xs">
-                      {registro.tipo === "Incidencia" && (
+                      {["Incidencia", "Edición"].includes(registro.tipo) && (
                         <button
                           type="button"
                           onClick={() => setSeleccionado(registro)}
                           className="text-orange-600 font-semibold hover:underline"
                         >
-                          Ver incidencia
+                          Ver {registro.tipo.toLowerCase()}
                         </button>
                       )}
                     </td>
@@ -288,15 +310,16 @@ export default function Historial() {
 
         <div className="bg-white border border-blue-100 rounded-lg p-4">
           {seleccionado ? (
-            <DetalleIncidencia
-              registro={seleccionado}
-              onClose={() => setSeleccionado(null)}
-            />
+            seleccionado.tipo === "Incidencia" ? (
+              <DetalleIncidencia registro={seleccionado} onClose={() => setSeleccionado(null)} />
+            ) : (
+              <DetalleEdicion registro={seleccionado} onClose={() => setSeleccionado(null)} />
+            )
           ) : (
             <div className="flex flex-col items-center justify-center min-h-[300px] text-center gap-2">
               <span className="text-3xl">📋</span>
               <p className="text-sm text-slate-500">
-                Selecciona una incidencia de la tabla para ver su detalle.
+                Selecciona una incidencia o edición de la tabla para ver su detalle.
               </p>
             </div>
           )}
@@ -368,6 +391,36 @@ function DetalleIncidencia({ registro, onClose }) {
         <span className="text-slate-500">Fecha / Hora</span>
         <span className="text-right text-slate-800">{formatearFecha(registro.fecha)}</span>
         <span className="text-slate-500">Estado actual del pedido</span>
+        <span className="text-right text-slate-800">{registro.estado}</span>
+      </div>
+    </div>
+  );
+}
+
+function DetalleEdicion({ registro, onClose }) {
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <div className="flex items-start justify-between">
+        <h2 className="text-base font-bold text-slate-800">Detalle de edición</h2>
+        <button type="button" onClick={onClose} aria-label="Cerrar detalle" className="text-xl text-slate-500">×</button>
+      </div>
+      <p className="bg-orange-50 border border-orange-100 rounded-lg p-3 text-slate-800 break-words">
+        {registro.descripcion}
+      </p>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <span className="text-slate-500">Pedido</span>
+        <span className="text-right font-bold text-slate-800">{registro.codigo}</span>
+        <span className="text-slate-500">Cliente</span>
+        <span className="text-right text-slate-800">{registro.cliente}</span>
+        <span className="text-slate-500">Modificado por</span>
+        <span className="text-right text-slate-800">{registro.usuario}</span>
+        <span className="text-slate-500">Fecha / Hora</span>
+        <span className="text-right text-slate-800">{formatearFecha(registro.fecha)}</span>
+        <span className="text-slate-500">Total anterior</span>
+        <span className="text-right text-slate-800">S/ {Number(registro.totalAnterior).toFixed(2)}</span>
+        <span className="text-slate-500">Nuevo total</span>
+        <span className="text-right font-bold text-slate-800">S/ {Number(registro.totalNuevo).toFixed(2)}</span>
+        <span className="text-slate-500">Estado actual</span>
         <span className="text-right text-slate-800">{registro.estado}</span>
       </div>
     </div>

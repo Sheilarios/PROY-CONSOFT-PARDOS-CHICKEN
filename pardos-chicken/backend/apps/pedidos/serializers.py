@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from django.db import transaction
+from pathlib import Path
+from PIL import Image
 
-from .models import Producto, Cliente, Pedido, DetallePedido, Incidencia
+from .models import Producto, Cliente, Pedido, DetallePedido, Incidencia, EdicionPedido
 from . import validators
 
 
@@ -11,11 +13,53 @@ class ProductoSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "nombre",
+            "imagen",
             "precio_unitario",
             "stock_disponible",
             "tiempo_preparacion_minutos",
             "activo",
         ]
+        read_only_fields = ["id", "activo"]
+
+    def validate_nombre(self, nombre):
+        nombre = nombre.strip()
+        if not nombre:
+            raise serializers.ValidationError("El nombre del producto es obligatorio.")
+        existentes = Producto.objects.filter(nombre__iexact=nombre)
+        if self.instance:
+            existentes = existentes.exclude(pk=self.instance.pk)
+        if existentes.exists():
+            raise serializers.ValidationError("Ya existe un producto con ese nombre.")
+        return nombre
+
+    def validate_precio_unitario(self, precio):
+        if precio <= 0:
+            raise serializers.ValidationError("El precio debe ser mayor a cero.")
+        return precio
+
+    def validate_tiempo_preparacion_minutos(self, minutos):
+        if minutos < 1:
+            raise serializers.ValidationError("El tiempo debe ser mayor a cero.")
+        return minutos
+
+    def validate_imagen(self, archivo):
+        if archivo.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("La imagen no debe superar 5 MB.")
+        extension = Path(archivo.name).suffix.lower()
+        if extension not in (".jpg", ".jpeg", ".png"):
+            raise serializers.ValidationError("Sube una imagen JPG o PNG.")
+        try:
+            archivo.seek(0)
+            formato = Image.open(archivo).format
+        except (OSError, ValueError):
+            raise serializers.ValidationError("La imagen no es válida.")
+        finally:
+            archivo.seek(0)
+        if (formato == "JPEG" and extension not in (".jpg", ".jpeg")) or (
+            formato == "PNG" and extension != ".png"
+        ) or formato not in ("JPEG", "PNG"):
+            raise serializers.ValidationError("El archivo debe ser una imagen JPG o PNG.")
+        return archivo
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -37,7 +81,7 @@ class DetallePedidoEntradaSerializer(serializers.Serializer):
     antes de tocar la base de datos: separa claramente entrada vs. modelo."""
 
     producto_id = serializers.PrimaryKeyRelatedField(
-        source="producto", queryset=Producto.objects.filter(activo=True)
+        source="producto", queryset=Producto.objects.all()
     )
     cantidad = serializers.IntegerField(min_value=1)
 
@@ -96,13 +140,30 @@ class PedidoRegistroSerializer(serializers.ModelSerializer):
             datos_pedido["modalidad_entrega"], datos_pedido.get("direccion_delivery", "")
         )
 
+        # Un producto aparece una sola vez aunque llegue repetido en la entrada.
+        detalles_por_producto = {}
+        for detalle in datos_pedido.get("detalles", []):
+            producto_id = detalle["producto"].pk
+            if producto_id in detalles_por_producto:
+                detalles_por_producto[producto_id]["cantidad"] += detalle["cantidad"]
+            else:
+                detalles_por_producto[producto_id] = detalle.copy()
+        datos_pedido["detalles"] = list(detalles_por_producto.values())
+
         detalles_solicitados = [
             (detalle["producto"], detalle["cantidad"])
-            for detalle in datos_pedido.get("detalles", [])
+            for detalle in datos_pedido["detalles"]
         ]
         if not detalles_solicitados:
             raise serializers.ValidationError(
                 {"detalles": "Debe registrar al menos un producto en el pedido."}
+            )
+        productos_inactivos = [
+            producto.nombre for producto, _ in detalles_solicitados if not producto.activo
+        ]
+        if productos_inactivos:
+            raise serializers.ValidationError(
+                {"detalles": "Productos no disponibles: " + ", ".join(productos_inactivos)}
             )
         validators.validar_stock_de_detalles(detalles_solicitados)
         return datos_pedido
@@ -111,6 +172,27 @@ class PedidoRegistroSerializer(serializers.ModelSerializer):
     def create(self, datos_pedido_validados):
         detalles_pedido = datos_pedido_validados.pop("detalles")
         usuario_que_registra = self.context["request"].user
+
+        # La validación inicial pudo quedar desactualizada antes de guardar.
+        productos = {
+            producto.pk: producto
+            for producto in Producto.objects.select_for_update().filter(
+                pk__in=[detalle["producto"].pk for detalle in detalles_pedido]
+            ).order_by("pk")
+        }
+        productos_inactivos = [
+            productos[detalle["producto"].pk].nombre
+            for detalle in detalles_pedido
+            if not productos[detalle["producto"].pk].activo
+        ]
+        if productos_inactivos:
+            raise serializers.ValidationError(
+                {"detalles": "Productos no disponibles: " + ", ".join(productos_inactivos)}
+            )
+        validators.validar_stock_de_detalles([
+            (productos[detalle["producto"].pk], detalle["cantidad"])
+            for detalle in detalles_pedido
+        ])
 
         nombre_cliente = datos_pedido_validados.get("cliente_nombre", "").strip()
         telefono_cliente = datos_pedido_validados.get("cliente_telefono", "")
@@ -145,7 +227,7 @@ class PedidoRegistroSerializer(serializers.ModelSerializer):
         )
 
         for detalle in detalles_pedido:
-            producto = detalle["producto"]
+            producto = productos[detalle["producto"].pk]
             cantidad = detalle["cantidad"]
 
             DetallePedido.objects.create(
@@ -159,6 +241,26 @@ class PedidoRegistroSerializer(serializers.ModelSerializer):
             producto.save(update_fields=["stock_disponible"])
 
         return pedido
+
+
+class PedidoEdicionSerializer(serializers.Serializer):
+    """Lista final de productos y observaciones de un pedido existente."""
+
+    detalles = DetallePedidoEntradaSerializer(many=True)
+    observaciones = serializers.CharField(max_length=500, allow_blank=True, required=False)
+
+    def validate_detalles(self, detalles):
+        if not detalles:
+            raise serializers.ValidationError("El pedido debe conservar al menos un producto.")
+
+        detalles_por_producto = {}
+        for detalle in detalles:
+            producto_id = detalle["producto"].pk
+            if producto_id in detalles_por_producto:
+                detalles_por_producto[producto_id]["cantidad"] += detalle["cantidad"]
+            else:
+                detalles_por_producto[producto_id] = detalle.copy()
+        return list(detalles_por_producto.values())
 
 
 class PedidoConsultaSerializer(serializers.ModelSerializer):
@@ -230,4 +332,24 @@ class IncidenciaSerializer(serializers.ModelSerializer):
 
     def get_registrado_por_nombre(self, incidencia):
         usuario = incidencia.registrado_por
+        return usuario.get_full_name() or usuario.username
+
+
+class EdicionPedidoSerializer(serializers.ModelSerializer):
+    pedido_id = serializers.IntegerField(source="pedido.id", read_only=True)
+    pedido_codigo = serializers.CharField(source="pedido.codigo", read_only=True)
+    pedido_cliente = serializers.CharField(source="pedido.cliente_nombre", read_only=True)
+    pedido_estado = serializers.CharField(source="pedido.estado", read_only=True)
+    modificado_por_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EdicionPedido
+        fields = [
+            "id", "pedido_id", "pedido_codigo", "pedido_cliente", "pedido_estado",
+            "descripcion", "total_anterior", "total_nuevo", "modificado_por_nombre",
+            "fecha",
+        ]
+
+    def get_modificado_por_nombre(self, edicion):
+        usuario = edicion.modificado_por
         return usuario.get_full_name() or usuario.username
