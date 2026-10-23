@@ -3,7 +3,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from apps.pedidos.models import Pedido
+from apps.pedidos.models import DetallePedido, Insumo, Pedido, Producto, RecetaInsumo
 from apps.usuarios.models import Usuario
 
 
@@ -17,6 +17,14 @@ def test_pedido_pasa_de_cola_a_preparacion_y_luego_a_listo():
         modalidad_entrega=Pedido.ModalidadEntrega.SALON,
         estado=Pedido.Estado.EN_COLA,
     )
+    producto = Producto.objects.create(
+        nombre="Pollo", precio_unitario=20, stock_disponible=3
+    )
+    insumo = Insumo.objects.create(nombre="Pollo crudo", stock_disponible=2)
+    RecetaInsumo.objects.create(producto=producto, insumo=insumo, cantidad=1)
+    DetallePedido.objects.create(
+        pedido=pedido, producto=producto, cantidad=1, precio_unitario_congelado=20
+    )
 
     inicio = api.post(f"/api/pedidos/{pedido.id}/iniciar-preparacion/")
 
@@ -25,6 +33,8 @@ def test_pedido_pasa_de_cola_a_preparacion_y_luego_a_listo():
     pedido.refresh_from_db()
     assert pedido.hora_inicio_preparacion is not None
     assert pedido.hora_fin_preparacion is None
+    insumo.refresh_from_db()
+    assert insumo.stock_disponible == 1
     assert api.get("/api/pedidos/cola-produccion/").data == []
     seguimiento = api.get("/api/pedidos/seguimiento-produccion/")
     assert [item["id"] for item in seguimiento.data] == [pedido.id]

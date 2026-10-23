@@ -1,5 +1,7 @@
 from django.contrib import admin
-from .models import Producto, Cliente, Pedido, DetallePedido, Incidencia
+from .models import (
+    Producto, Insumo, RecetaInsumo, Cliente, Pedido, DetallePedido, Incidencia,
+)
 
 
 class DetallePedidoInline(admin.TabularInline):
@@ -8,10 +10,22 @@ class DetallePedidoInline(admin.TabularInline):
     readonly_fields = ["precio_unitario_congelado"]
 
 
+class RecetaInsumoInline(admin.TabularInline):
+    model = RecetaInsumo
+    extra = 1
+
+
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
     list_display = ["nombre", "precio_unitario", "stock_disponible", "activo"]
     list_filter = ["activo"]
+    search_fields = ["nombre"]
+    inlines = [RecetaInsumoInline]
+
+
+@admin.register(Insumo)
+class InsumoAdmin(admin.ModelAdmin):
+    list_display = ["nombre", "stock_disponible", "unidad"]
     search_fields = ["nombre"]
 
 
@@ -34,3 +48,12 @@ class PedidoAdmin(admin.ModelAdmin):
 class IncidenciaAdmin(admin.ModelAdmin):
     list_display = ["pedido", "tipo", "registrado_por", "fecha_registro"]
     list_filter = ["tipo"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

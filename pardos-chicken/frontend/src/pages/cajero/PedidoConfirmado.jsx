@@ -101,6 +101,15 @@ export default function PedidoConfirmado() {
           >
             Ver pedidos
           </button>
+          {pedido.pedidoId && (
+            <button
+              type="button"
+              onClick={() => navigate(`/cajero/incidencias/nueva?pedido=${pedido.pedidoId}`)}
+              className="px-6 h-12 bg-white text-orange-600 text-sm font-semibold rounded-lg border border-orange-600 hover:bg-orange-50 transition-colors"
+            >
+              Registrar incidencia y anular
+            </button>
+          )}
         </div>
       </div>
     </div>

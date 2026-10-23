@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pedidosService } from "../../api/pedidosService";
+import imagenCuartoPollo from "../../assets/productos/cuarto-pollo.png";
+import imagenPolloEntero from "../../assets/productos/pollo-entero.png";
+import imagenPapasFritas from "../../assets/productos/papas-fritas.png";
+import imagenGaseosa from "../../assets/productos/gaseosa-1-5l.png";
 
 const MODALIDADES = [
   { id: "salon", label: "Salón", icono: "🍽️" },
@@ -12,6 +16,15 @@ const MODALIDADES = [
 // Helpers
 // ----------------------------------------------------------------------
 const formatSoles = (n) => `S/ ${n.toFixed(2)}`;
+
+const imagenDeProducto = (nombre) => {
+  const nombreMinusculas = nombre.toLowerCase();
+  if (nombreMinusculas.includes("1/4 pollo")) return imagenCuartoPollo;
+  if (nombreMinusculas.includes("pollo entero")) return imagenPolloEntero;
+  if (nombreMinusculas.includes("papas fritas")) return imagenPapasFritas;
+  if (nombreMinusculas.includes("gaseosa 1.5")) return imagenGaseosa;
+  return null;
+};
 
 const stockBadge = (stock) => {
   if (stock === 0)
@@ -44,6 +57,7 @@ export default function RegistrarPedido() {
     modalidad: "salon",
     direccion: "",
   });
+  const [observaciones, setObservaciones] = useState("");
 
   // Carrito: { [productoId]: cantidad }
   const [carrito, setCarrito] = useState({});
@@ -59,7 +73,7 @@ export default function RegistrarPedido() {
     pedidosService.listarProductos()
       .then((lista) => setProductos(lista.map((p) => ({
         id: p.id,
-        icono: "🍗",
+        imagen: imagenDeProducto(p.nombre),
         nombre: p.nombre,
         precio: Number(p.precio_unitario),
         stock: p.stock_disponible,
@@ -185,6 +199,7 @@ export default function RegistrarPedido() {
       direccion: "",
     });
     setCarrito({});
+    setObservaciones("");
     setClienteId(null);
     setClientesEncontrados([]);
     setBusqueda("");
@@ -218,6 +233,7 @@ export default function RegistrarPedido() {
         cliente_telefono: cliente.telefono.trim(),
         modalidad_entrega: cliente.modalidad.toUpperCase(),
         direccion_delivery: cliente.modalidad === "delivery" ? cliente.direccion.trim() : "",
+        observaciones: observaciones.trim(),
         ...(clienteId ? { cliente_id: clienteId } : {}),
         detalles: carritoItems.map((item) => ({
           producto_id: item.id,
@@ -227,6 +243,7 @@ export default function RegistrarPedido() {
       const respuesta = await pedidosService.registrarPedido(payload);
       const pedidoCreado = {
         id: respuesta.codigo,
+        pedidoId: respuesta.id,
         hora: new Date(respuesta.fecha_creacion).toLocaleTimeString("es-PE", {
           hour: "2-digit", minute: "2-digit",
         }),
@@ -403,6 +420,26 @@ export default function RegistrarPedido() {
               </div>
             )}
 
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="observaciones"
+                className="text-xs font-semibold text-slate-800 font-['Inter']"
+              >
+                Observaciones
+              </label>
+              <textarea
+                id="observaciones"
+                name="observaciones"
+                rows={3}
+                maxLength={500}
+                placeholder="Ej. Sin salsas, extra papas, etc."
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                disabled={enviando}
+                className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs text-slate-800 outline-none focus:border-orange-500 disabled:bg-slate-50 resize-y"
+              />
+            </div>
+
           </div>
         </div>
 
@@ -445,10 +482,14 @@ export default function RegistrarPedido() {
                       key={p.id}
                       className="border border-slate-200 rounded-md p-2.5 flex items-center gap-2"
                     >
-                      {/* Icono + nombre */}
+                      {/* Imagen + nombre */}
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="w-10 h-10 bg-slate-50 rounded-md flex items-center justify-center text-lg shrink-0">
-                          {p.icono}
+                        <div className="w-10 h-10 bg-slate-50 rounded-md flex items-center justify-center overflow-hidden shrink-0">
+                          {p.imagen ? (
+                            <img src={p.imagen} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-lg font-semibold text-slate-500">{p.nombre.charAt(0)}</span>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
                           <span className="text-xs font-semibold text-slate-800 font-['Inter'] truncate">

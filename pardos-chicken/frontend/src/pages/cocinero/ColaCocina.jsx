@@ -48,6 +48,7 @@ export default function ColaCocina() {
           ? `${Math.max(0, Math.floor((Date.now() - new Date(p.fecha_creacion)) / 60000))} min`
           : "—",
         productos: p.detalles.map((d) => `${d.cantidad} × ${d.producto_nombre}`).join(", "),
+        observaciones: p.observaciones,
         estado: estados[p.estado],
         inicio: hora(p.hora_inicio_preparacion),
         fin: hora(p.hora_fin_preparacion),
@@ -81,8 +82,9 @@ export default function ColaCocina() {
       await pedidosService.iniciarPreparacion(id);
       await cargarPedidos();
     } catch (err) {
-      const estado = err.response?.data?.estado;
-      setError(Array.isArray(estado) ? estado[0] : "No se pudo iniciar la preparación.");
+      const mensaje = err.response?.data?.insumos || err.response?.data?.detalles
+        || err.response?.data?.estado;
+      setError(Array.isArray(mensaje) ? mensaje[0] : mensaje || "No se pudo iniciar la preparación.");
     } finally {
       setProcesandoId(null);
     }
@@ -232,6 +234,11 @@ export default function ColaCocina() {
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-800 font-['Inter']">
                       {p.productos}
+                      {p.observaciones && (
+                        <p className="mt-1 text-orange-700 whitespace-pre-wrap break-words">
+                          Obs.: {p.observaciones}
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <span

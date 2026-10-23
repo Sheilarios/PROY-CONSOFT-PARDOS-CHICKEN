@@ -1,4 +1,4 @@
-// API de los flujos de pedidos implementados hasta el Incremento 2.
+// API de pedidos, producción e incidencias.
 import axiosClient from "./axiosClient";
 
 export const pedidosService = {
@@ -24,6 +24,12 @@ export const pedidosService = {
 
   registrarPedido: (payload) =>
     axiosClient.post("/pedidos/", payload).then((r) => r.data),
+
+  registrarIncidencia: (payload) =>
+    axiosClient.post("/pedidos/incidencias/", payload).then((r) => r.data),
+
+  listarIncidencias: () =>
+    axiosClient.get("/pedidos/incidencias/").then((r) => r.data.results || r.data),
 
   actualizarProducto: (id, payload) =>
     axiosClient.put(`/pedidos/productos/${id}/`, payload).then((r) => r.data),

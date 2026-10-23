@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { pedidosService } from "../../api/pedidosService";
 
 const MODALIDADES = { SALON: "Salón", DELIVERY: "Delivery", RECOJO: "Recojo" };
@@ -9,10 +9,13 @@ const ESTADOS = {
   EN_PREPARACION: "En preparación",
   LISTO: "Listo",
   DESPACHADO: "Despachado",
+  CANCELADO: "Cancelado",
 };
 
 export default function DetallePedido() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const rutaPedidos = location.pathname.replace(/\/detalle\/?$/, "");
   const [params] = useSearchParams();
   const id = params.get("id");
   const [pedido, setPedido] = useState(null);
@@ -39,14 +42,26 @@ export default function DetallePedido() {
 
   useEffect(() => { cargarPedido(); }, [cargarPedido]);
 
+  useEffect(() => {
+    window.addEventListener("focus", cargarPedido);
+    return () => window.removeEventListener("focus", cargarPedido);
+  }, [cargarPedido]);
+
   const enviarAProduccion = async () => {
     setEnviando(true);
     setError("");
     try {
+      const pedidoActual = await pedidosService.obtenerPedido(pedido.id);
+      setPedido(pedidoActual);
+      if (pedidoActual.estado !== "REGISTRADO") {
+        setError("Este pedido ya no está registrado. Se actualizó el detalle.");
+        return;
+      }
       await pedidosService.enviarAProduccion(pedido.id);
       await cargarPedido();
     } catch (err) {
       const estado = err.response?.data?.estado;
+      await cargarPedido();
       setError(Array.isArray(estado) ? estado[0] : "No se pudo enviar el pedido a cocina.");
     } finally {
       setEnviando(false);
@@ -55,7 +70,7 @@ export default function DetallePedido() {
 
   return (
     <div className="flex flex-col w-full gap-4">
-      <button type="button" onClick={() => navigate(-1)} className="self-start text-xs font-semibold text-orange-600">
+      <button type="button" onClick={() => navigate(rutaPedidos)} className="self-start text-xs font-semibold text-orange-600">
         ← Volver a pedidos
       </button>
       <h1 className="text-2xl font-bold text-slate-800">Detalle del pedido</h1>
@@ -73,6 +88,7 @@ export default function DetallePedido() {
             <Dato label="Total" valor={`S/ ${Number(pedido.total).toFixed(2)}`} />
             <Dato label="Registrado" valor={new Date(pedido.fecha_creacion).toLocaleString("es-PE")} />
             {pedido.direccion_delivery && <Dato label="Dirección" valor={pedido.direccion_delivery} />}
+            {pedido.observaciones && <Dato label="Observaciones" valor={pedido.observaciones} />}
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -101,6 +117,15 @@ export default function DetallePedido() {
               {enviando ? "Enviando..." : "Enviar a cocina"}
             </button>
           )}
+          {location.pathname.startsWith("/cajero/") && ["REGISTRADO", "EN_COLA"].includes(pedido.estado) && (
+            <button
+              type="button"
+              onClick={() => navigate(`/cajero/incidencias/nueva?pedido=${pedido.id}`)}
+              className="self-start px-4 py-2 bg-white text-orange-600 text-xs font-semibold rounded-md border border-orange-600 hover:bg-orange-50"
+            >
+              Registrar incidencia y anular
+            </button>
+          )}
         </>
       )}
     </div>
@@ -111,7 +136,7 @@ function Dato({ label, valor }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-slate-500">{label}</span>
-      <span className="text-sm font-semibold text-slate-800">{valor}</span>
+      <span className="text-sm font-semibold text-slate-800 whitespace-pre-wrap break-words">{valor}</span>
     </div>
   );
 }

@@ -1,20 +1,25 @@
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.exceptions import NotFound, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import rest_framework as filters
 from datetime import datetime, time, timedelta
+from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 
-from .models import Producto, Cliente, Pedido
+from apps.usuarios.models import Usuario
+
+from .models import Producto, Insumo, RecetaInsumo, Cliente, Pedido, Incidencia
 from .serializers import (
     ProductoSerializer,
     ClienteSerializer,
     PedidoRegistroSerializer,
     PedidoConsultaSerializer,
+    IncidenciaSerializer,
 )
 from . import validators
 
@@ -103,6 +108,49 @@ class ClienteViewSet(
         return Response(resultados)
 
 
+class PermisoIncidencia(BasePermission):
+    """Caja registra incidencias; administración consulta el historial."""
+
+    def has_permission(self, request, view):
+        if view.action == "create":
+            return request.user.rol == Usuario.Rol.CAJERO and not request.user.is_superuser
+        if view.action == "list":
+            return request.user.is_superuser or request.user.rol == Usuario.Rol.ADMINISTRADOR
+        return False
+
+
+class IncidenciaViewSet(
+    mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet
+):
+    queryset = Incidencia.objects.select_related("pedido", "registrado_por").order_by(
+        "-fecha_registro", "-id"
+    )
+    serializer_class = IncidenciaSerializer
+    permission_classes = [IsAuthenticated, PermisoIncidencia]
+    pagination_class = None
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        pedido = Pedido.objects.select_for_update().get(
+            pk=serializer.validated_data["pedido"].pk
+        )
+        if pedido.estado not in (Pedido.Estado.REGISTRADO, Pedido.Estado.EN_COLA):
+            raise ValidationError(
+                {"pedido_id": "Solo se permiten incidencias en pedidos registrados o en cola."}
+            )
+
+        for producto_id, cantidad in pedido.detalles.values_list(
+            "producto_id", "cantidad"
+        ):
+            Producto.objects.filter(pk=producto_id).update(
+                stock_disponible=F("stock_disponible") + cantidad
+            )
+        pedido.estado = Pedido.Estado.CANCELADO
+        pedido.save(update_fields=["estado", "fecha_actualizacion"])
+
+        serializer.save(pedido=pedido, registrado_por=self.request.user)
+
+
 class PedidoViewSet(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,
@@ -129,6 +177,14 @@ class PedidoViewSet(
     filter_backends = [DjangoFilterBackend]
     filterset_class = PedidoFiltro
     pagination_class = None
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if getattr(self, "action", None) in {
+            "enviar_a_produccion", "iniciar_preparacion", "marcar_listo"
+        }:
+            return queryset.select_for_update()
+        return queryset
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -163,6 +219,7 @@ class PedidoViewSet(
         )
         return Response(PedidoConsultaSerializer(pedidos, many=True).data)
 
+    @transaction.atomic
     @action(detail=True, methods=["post"], url_path="enviar-a-produccion")
     def enviar_a_produccion(self, request, pk=None):
         """RF-03: envía un pedido registrado a la cola de producción."""
@@ -179,9 +236,10 @@ class PedidoViewSet(
 
         return Response(PedidoConsultaSerializer(pedido).data, status=status.HTTP_200_OK)
 
+    @transaction.atomic
     @action(detail=True, methods=["post"], url_path="iniciar-preparacion")
     def iniciar_preparacion(self, request, pk=None):
-        """Pasa un pedido de la cola a preparación."""
+        """Inicia la preparación solo si hay insumos y los descuenta una vez."""
         pedido = self.get_object()
         validators.validar_transicion_estado(
             estado_actual=pedido.estado,
@@ -189,11 +247,56 @@ class PedidoViewSet(
             estados_orden=Pedido.ESTADOS_ORDEN,
         )
 
+        detalles = list(pedido.detalles.select_related("producto"))
+        if not detalles:
+            raise ValidationError({"detalles": "El pedido no tiene productos para preparar."})
+
+        recetas = RecetaInsumo.objects.filter(
+            producto_id__in=[detalle.producto_id for detalle in detalles]
+        )
+        recetas_por_producto = {}
+        for receta in recetas:
+            recetas_por_producto.setdefault(receta.producto_id, []).append(receta)
+
+        insumos_necesarios = {}
+        for detalle in detalles:
+            receta_producto = recetas_por_producto.get(detalle.producto_id)
+            if not receta_producto:
+                raise ValidationError(
+                    {"insumos": f"Configura los insumos de {detalle.producto.nombre}."}
+                )
+            for receta in receta_producto:
+                insumos_necesarios[receta.insumo_id] = (
+                    insumos_necesarios.get(receta.insumo_id, 0)
+                    + receta.cantidad * detalle.cantidad
+                )
+
+        insumos = {
+            insumo.id: insumo
+            for insumo in Insumo.objects.select_for_update()
+            .filter(id__in=insumos_necesarios)
+            .order_by("id")
+        }
+        faltantes = [
+            f"{insumos[id_insumo].nombre}: se necesitan {cantidad} y hay "
+            f"{insumos[id_insumo].stock_disponible}"
+            for id_insumo, cantidad in insumos_necesarios.items()
+            if insumos[id_insumo].stock_disponible < cantidad
+        ]
+        if faltantes:
+            raise ValidationError({"insumos": "Stock insuficiente de " + ", ".join(faltantes)})
+
+        for id_insumo, cantidad in insumos_necesarios.items():
+            insumo = insumos[id_insumo]
+            insumo.stock_disponible -= cantidad
+            insumo.save(update_fields=["stock_disponible"])
+
         pedido.estado = Pedido.Estado.EN_PREPARACION
         pedido.hora_inicio_preparacion = timezone.now()
         pedido.save(update_fields=["estado", "hora_inicio_preparacion", "fecha_actualizacion"])
         return Response(PedidoConsultaSerializer(pedido).data)
 
+    @transaction.atomic
     @action(detail=True, methods=["post"], url_path="marcar-listo")
     def marcar_listo(self, request, pk=None):
         """Marca como listo un pedido que está en preparación."""

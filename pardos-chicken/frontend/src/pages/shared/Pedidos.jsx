@@ -79,7 +79,7 @@ export default function Pedidos() {
       const respuesta = await pedidosService.listar();
       const lista = respuesta.results || respuesta;
       const modalidades = { SALON: "Salón", DELIVERY: "Delivery", RECOJO: "Recojo" };
-      const estados = { REGISTRADO: "Registrado", EN_COLA: "En cola", EN_PREPARACION: "En preparación", LISTO: "Listo", DESPACHADO: "Despachado" };
+      const estados = { REGISTRADO: "Registrado", EN_COLA: "En cola", EN_PREPARACION: "En preparación", LISTO: "Listo", DESPACHADO: "Despachado", CANCELADO: "Cancelado" };
       setPedidos(lista.map((p) => ({
         id: p.id,
         codigo: p.codigo,
@@ -99,7 +99,12 @@ export default function Pedidos() {
     }
   }, []);
 
-  useEffect(() => { cargarPedidos(); }, [cargarPedidos]);
+  useEffect(() => { cargarPedidos(); }, [cargarPedidos, filtroEstado]);
+
+  useEffect(() => {
+    window.addEventListener("focus", cargarPedidos);
+    return () => window.removeEventListener("focus", cargarPedidos);
+  }, [cargarPedidos]);
 
   // ---------- Contadores ----------
   const stats = useMemo(() => {
@@ -112,7 +117,8 @@ export default function Pedidos() {
       (p) => p.estado === "En preparación",
     ).length;
     const listos = pedidos.filter((p) => p.estado === "Listo").length;
-    return { total, registrados, pendientes, enPrep, listos };
+    const cancelados = pedidos.filter((p) => p.estado === "Cancelado").length;
+    return { total, registrados, pendientes, enPrep, listos, cancelados };
   }, [pedidos]);
 
   // ---------- Filtrado ----------
@@ -147,10 +153,17 @@ export default function Pedidos() {
     setProcesandoId(id);
     setError("");
     try {
+      const pedidoActual = await pedidosService.obtenerPedido(id);
+      if (pedidoActual.estado !== "REGISTRADO") {
+        await cargarPedidos();
+        setError("Este pedido ya no está registrado. Se actualizó la lista.");
+        return;
+      }
       await pedidosService.enviarAProduccion(id);
       await cargarPedidos();
     } catch (err) {
       const estado = err.response?.data?.estado;
+      await cargarPedidos();
       setError(Array.isArray(estado) ? estado[0] : "No se pudo enviar el pedido a cocina.");
     } finally {
       setProcesandoId(null);
@@ -187,6 +200,7 @@ export default function Pedidos() {
               valor: "En preparación",
             },
             { label: `Listos (${stats.listos})`, valor: "Listo" },
+            { label: `Cancelados (${stats.cancelados})`, valor: "Cancelado" },
           ].map((f) => {
             const active = filtroEstado === f.valor;
             return (
@@ -310,7 +324,7 @@ export default function Pedidos() {
                     </td>
                     <td className="px-3 py-3">
                       {p.estadoCodigo === "REGISTRADO" && (
-                        <button type="button" onClick={() => enviarAProduccion(p.id)} disabled={procesandoId !== null} className="mr-2 px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded disabled:opacity-50">
+                        <button type="button" onClick={() => enviarAProduccion(p.id)} disabled={cargando || procesandoId !== null} className="mr-2 px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded disabled:opacity-50">
                           Enviar a cocina
                         </button>
                       )}

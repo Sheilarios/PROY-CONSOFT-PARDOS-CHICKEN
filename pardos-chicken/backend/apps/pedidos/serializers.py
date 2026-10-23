@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.db import transaction
 
-from .models import Producto, Cliente, Pedido, DetallePedido
+from .models import Producto, Cliente, Pedido, DetallePedido, Incidencia
 from . import validators
 
 
@@ -78,6 +78,7 @@ class PedidoRegistroSerializer(serializers.ModelSerializer):
             "cliente_nombre",
             "cliente_telefono",
             "direccion_delivery",
+            "observaciones",
             "modalidad_entrega",
             "estado",
             "detalles",
@@ -178,6 +179,7 @@ class PedidoConsultaSerializer(serializers.ModelSerializer):
             "cliente_nombre",
             "cliente_telefono",
             "direccion_delivery",
+            "observaciones",
             "modalidad_entrega",
             "estado",
             "prioridad",
@@ -189,3 +191,43 @@ class PedidoConsultaSerializer(serializers.ModelSerializer):
             "hora_inicio_preparacion",
             "hora_fin_preparacion",
         ]
+
+
+class IncidenciaSerializer(serializers.ModelSerializer):
+    pedido_id = serializers.PrimaryKeyRelatedField(
+        source="pedido", queryset=Pedido.objects.all()
+    )
+    pedido_codigo = serializers.CharField(source="pedido.codigo", read_only=True)
+    pedido_cliente = serializers.CharField(source="pedido.cliente_nombre", read_only=True)
+    pedido_estado = serializers.CharField(source="pedido.estado", read_only=True)
+    registrado_por_nombre = serializers.SerializerMethodField()
+    rol_registrador = serializers.CharField(source="registrado_por.rol", read_only=True)
+    tipo = serializers.ChoiceField(
+        choices=[
+            Incidencia.Tipo.CANCELACION,
+            Incidencia.Tipo.ERROR_PRODUCTOS,
+            Incidencia.Tipo.ERROR_MODALIDAD,
+            Incidencia.Tipo.ERROR_CLIENTE,
+        ]
+    )
+    descripcion = serializers.CharField(max_length=500)
+
+    class Meta:
+        model = Incidencia
+        fields = [
+            "id",
+            "pedido_id",
+            "pedido_codigo",
+            "pedido_cliente",
+            "pedido_estado",
+            "tipo",
+            "descripcion",
+            "registrado_por_nombre",
+            "rol_registrador",
+            "fecha_registro",
+        ]
+        read_only_fields = ["id", "fecha_registro"]
+
+    def get_registrado_por_nombre(self, incidencia):
+        usuario = incidencia.registrado_por
+        return usuario.get_full_name() or usuario.username
