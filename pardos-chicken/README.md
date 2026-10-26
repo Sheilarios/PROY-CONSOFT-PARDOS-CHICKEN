@@ -157,17 +157,51 @@ Las rutas son `POST /api/pedidos/incidencias/` para caja y
 `GET /api/pedidos/incidencias/` para administración. **Reportes** todavía usa
 datos de ejemplo y no calcula ventas a partir de estas cancelaciones.
 
+## Edición de pedidos antes de la preparación
+
+En **Cajero → Pedidos**, **Editar pedido** aparece solo si el pedido está
+**Registrado** o **En cola**. La opción permite agregar o quitar productos,
+cambiar cantidades y modificar observaciones; conserva el cliente, la modalidad
+y el estado. La anulación sigue siendo una acción separada desde **Ver detalle →
+Registrar incidencia**.
+
+Los complementos se crean como productos normales del catálogo, con nombre,
+precio y stock. No hay nombres de complementos fijos en el código. Si un producto
+nuevo entrará en producción, también necesita una receta de insumos para poder
+iniciar su preparación.
+
+La edición usa `POST /api/pedidos/{id}/editar/` con la **lista final** de
+`detalles` y `observaciones`. Omitir un producto de esa lista lo quita del
+pedido; cada cantidad enviada debe ser positiva y debe quedar al menos un
+producto. El backend vuelve a comprobar el estado y el stock antes de guardar.
+Solo reserva o devuelve la diferencia de unidades; mantiene el precio guardado
+de los productos existentes y toma el precio actual del catálogo para los
+nuevos. Si falta stock, no aplica ningún cambio.
+
+Cada edición guarda el usuario, fecha, descripción, total anterior y nuevo total.
+Administración puede consultarla en **Historial** o en
+`GET /api/pedidos/ediciones/`. Los `PUT` y `PATCH` generales de pedidos siguen
+deshabilitados para evitar cambios arbitrarios de estado.
+
 ## Frontend integrado
 
 - El inicio de sesión usa JWT y `GET /api/usuarios/me/` para mostrar el rol real.
 - **Cajero → Registrar pedido** carga productos y stock reales, busca clientes
   por nombre y guarda el pedido con sus detalles en la API. **Clientes** muestra
   los registros reales y **Pedidos** permite consultar y enviar a cocina.
+- **Productos** consulta el mismo catálogo que **Registrar pedido** y **Editar
+  pedido**. Administración puede agregar productos y actualizar nombre, precio y stock; caja solo
+  consulta. La categoría de la maqueta no aparece porque todavía no existe en
+  el modelo real de productos. Un producto nuevo necesita configurar su receta
+  de insumos en Django Admin antes de iniciar la preparación de un pedido que lo
+  contenga. La imagen es opcional: admite JPG o PNG de hasta 5 MB y se muestra
+  en el catálogo. Los archivos se guardan en `backend/media/`, que no se sube a
+  GitHub; cada instalación conserva sus propias imágenes locales.
 - **Cocinero → Cola de cocina** muestra la cola priorizada y permite avanzar
   pedidos a **En preparación** y **Listo**. **Administrador → Producción** usa
   la misma vista funcional.
 - **Cajero → Registrar incidencia** y **Administrador → Historial** muestran
-  registros reales de pedidos, observaciones e incidencias.
+  registros reales de pedidos, observaciones, ediciones e incidencias.
 - Las demás pantallas del nuevo diseño corresponden a funcionalidades fuera de
   este alcance y todavía contienen datos de ejemplo.
 

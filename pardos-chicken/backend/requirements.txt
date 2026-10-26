@@ -19,6 +19,7 @@ django-cors-headers==4.4.0
 
 # Filtros para consultas de pedidos (RF-03)
 django-filter==24.3
+Pillow==11.3.0
 
 # Pruebas
 pytest==8.3.3

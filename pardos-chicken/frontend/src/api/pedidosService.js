@@ -5,6 +5,9 @@ export const pedidosService = {
   listarProductos: () =>
     axiosClient.get("/pedidos/productos/").then((r) => r.data.results || r.data),
 
+  crearProducto: (payload) =>
+    axiosClient.post("/pedidos/productos/", payload).then((r) => r.data),
+
   buscarClientesPorNombre: (nombre) =>
     axiosClient.get("/pedidos/clientes/buscar-por-nombre/", { params: { nombre } }).then((r) => r.data),
 
@@ -25,11 +28,17 @@ export const pedidosService = {
   registrarPedido: (payload) =>
     axiosClient.post("/pedidos/", payload).then((r) => r.data),
 
+  editarPedido: (id, payload) =>
+    axiosClient.post(`/pedidos/${id}/editar/`, payload).then((r) => r.data),
+
   registrarIncidencia: (payload) =>
     axiosClient.post("/pedidos/incidencias/", payload).then((r) => r.data),
 
   listarIncidencias: () =>
     axiosClient.get("/pedidos/incidencias/").then((r) => r.data.results || r.data),
+
+  listarEdiciones: () =>
+    axiosClient.get("/pedidos/ediciones/").then((r) => r.data.results || r.data),
 
   actualizarProducto: (id, payload) =>
     axiosClient.put(`/pedidos/productos/${id}/`, payload).then((r) => r.data),

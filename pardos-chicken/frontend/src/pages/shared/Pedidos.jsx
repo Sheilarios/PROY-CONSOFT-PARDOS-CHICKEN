@@ -323,18 +323,29 @@ export default function Pedidos() {
                       </span>
                     </td>
                     <td className="px-3 py-3">
-                      {p.estadoCodigo === "REGISTRADO" && (
-                        <button type="button" onClick={() => enviarAProduccion(p.id)} disabled={cargando || procesandoId !== null} className="mr-2 px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded disabled:opacity-50">
-                          Enviar a cocina
+                      <div className="flex flex-wrap gap-2">
+                        {p.estadoCodigo === "REGISTRADO" && (
+                          <button type="button" onClick={() => enviarAProduccion(p.id)} disabled={cargando || procesandoId !== null} className="px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded disabled:opacity-50">
+                            Enviar a cocina
+                          </button>
+                        )}
+                        {rol === "cajero" && ["REGISTRADO", "EN_COLA"].includes(p.estadoCodigo) && (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/cajero/pedidos/editar?id=${encodeURIComponent(p.id)}`)}
+                            className="px-3 py-1.5 bg-white border border-orange-600 text-orange-600 text-xs font-semibold rounded hover:bg-orange-50"
+                          >
+                            Editar pedido
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => verDetalle(p.id)}
+                          className="px-4 py-1.5 bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded hover:bg-slate-50 transition-colors"
+                        >
+                          Ver detalle
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => verDetalle(p.id)}
-                        className="px-4 py-1.5 bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded hover:bg-slate-50 transition-colors"
-                      >
-                        Ver detalle
-                      </button>
+                      </div>
                     </td>
                   </tr>
                 ))

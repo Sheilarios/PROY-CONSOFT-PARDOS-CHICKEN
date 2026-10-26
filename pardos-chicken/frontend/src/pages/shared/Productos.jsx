@@ -1,59 +1,28 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { pedidosService } from "../../api/pedidosService";
 import EditarProducto from "./EditarProducto";
+import AgregarProducto from "./AgregarProducto";
+import imagenCuartoPollo from "../../assets/productos/cuarto-pollo.png";
+import imagenPolloEntero from "../../assets/productos/pollo-entero.png";
+import imagenPapasFritas from "../../assets/productos/papas-fritas.png";
+import imagenGaseosa from "../../assets/productos/gaseosa-1-5l.png";
 
-// ----------------------------------------------------------------------
-// Catálogo de ejemplo (luego vendrá del backend)
-// ----------------------------------------------------------------------
-const PRODUCTOS_INICIALES = [
-  {
-    id: 1,
-    icono: "🍗",
-    nombre: "1/2 Pollo a la brasa",
-    precio: 32.0,
-    stock: 18,
-    categoria: "Pollos",
-  },
-  {
-    id: 2,
-    icono: "🍟",
-    nombre: "Papas familiares",
-    precio: 12.0,
-    stock: 24,
-    categoria: "Acompañamientos",
-  },
-  {
-    id: 3,
-    icono: "🥗",
-    nombre: "Ensalada",
-    precio: 8.0,
-    stock: 4,
-    categoria: "Acompañamientos",
-  },
-  {
-    id: 4,
-    icono: "🥤",
-    nombre: "Gaseosa 1.5 L",
-    precio: 10.0,
-    stock: 16,
-    categoria: "Bebidas",
-  },
-  {
-    id: 5,
-    icono: "🍗",
-    nombre: "Pollo entero",
-    precio: 42.0,
-    stock: 8,
-    categoria: "Pollos",
-  },
-  {
-    id: 6,
-    icono: "🧂",
-    nombre: "Salsas extra",
-    precio: 3.0,
-    stock: 30,
-    categoria: "Extras",
-  },
-];
+const imagenDeProducto = (nombre) => {
+  const nombreMinusculas = nombre.toLowerCase();
+  if (nombreMinusculas.includes("1/4 pollo")) return imagenCuartoPollo;
+  if (nombreMinusculas.includes("pollo entero")) return imagenPolloEntero;
+  if (nombreMinusculas.includes("papas fritas")) return imagenPapasFritas;
+  if (nombreMinusculas.includes("gaseosa 1.5")) return imagenGaseosa;
+  return null;
+};
+
+const adaptarProducto = (producto) => ({
+  id: producto.id,
+  nombre: producto.nombre,
+  imagen: producto.imagen,
+  precio: Number(producto.precio_unitario),
+  stock: producto.stock_disponible,
+});
 
 const UMBRAL_STOCK_BAJO = 5;
 
@@ -87,10 +56,22 @@ const formatSoles = (n) =>
 // Componente
 // ----------------------------------------------------------------------
 export default function Productos() {
-  const [productos, setProductos] = useState(PRODUCTOS_INICIALES);
+  const esAdministrador = localStorage.getItem("rol") === "administrador";
+  const [productos, setProductos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  const [aviso, setAviso] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
   const [editando, setEditando] = useState(null);
+  const [agregando, setAgregando] = useState(false);
+
+  useEffect(() => {
+    pedidosService.listarProductos()
+      .then((lista) => setProductos(lista.map(adaptarProducto)))
+      .catch(() => setError("No se pudo cargar el catálogo de productos."))
+      .finally(() => setCargando(false));
+  }, []);
 
   // ---------- Stats ----------
   const stats = useMemo(() => {
@@ -111,8 +92,7 @@ export default function Productos() {
     return productos.filter((p) => {
       const okBusqueda =
         !q ||
-        p.nombre.toLowerCase().includes(q) ||
-        p.categoria.toLowerCase().includes(q);
+        p.nombre.toLowerCase().includes(q);
       const okEstado =
         filtroEstado === "Todos"
           ? true
@@ -122,29 +102,55 @@ export default function Productos() {
   }, [productos, busqueda, filtroEstado]);
 
   // ---------- Handlers ----------
-  const handleGuardar = (productoActualizado) => {
+  const handleGuardar = async (cambios) => {
+    const datos = new FormData();
+    datos.append("nombre", cambios.nombre);
+    datos.append("precio_unitario", String(cambios.precio));
+    datos.append("stock_disponible", String(cambios.stock));
+    datos.append("stock_anterior", String(editando.stock));
+    if (cambios.imagen) datos.append("imagen", cambios.imagen);
+    const actualizado = adaptarProducto(await pedidosService.actualizarProducto(editando.id, datos));
     setProductos((prev) =>
       prev.map((p) =>
-        p.id === productoActualizado.id ? productoActualizado : p,
+        p.id === actualizado.id ? actualizado : p,
       ),
     );
     setEditando(null);
+    setAviso("Producto actualizado. Caja verá el nuevo precio y stock al recargar.");
+  };
+
+  const handleAgregar = async (datos) => {
+    const formulario = new FormData();
+    formulario.append("nombre", datos.nombre);
+    formulario.append("precio_unitario", String(datos.precio_unitario));
+    formulario.append("stock_disponible", String(datos.stock_disponible));
+    if (datos.imagen) formulario.append("imagen", datos.imagen);
+    const creado = adaptarProducto(await pedidosService.crearProducto(formulario));
+    setProductos((prev) => [...prev, creado].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")));
+    setAgregando(false);
+    setAviso("Producto agregado. Ya aparece en el catálogo de caja.");
   };
 
   return (
     <div className="flex flex-col w-full gap-4">
       {/* ---------- Encabezado ---------- */}
-      <div className="flex flex-col gap-1">
-        <span className="text-orange-600 text-xs font-bold font-['Inter'] uppercase">
-          Inventario
-        </span>
-        <h1 className="text-2xl font-bold text-slate-800 font-['Inter']">
-          Productos
-        </h1>
-        <p className="text-xs text-slate-500 font-['Inter']">
-          Consulta precios y actualiza las existencias.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-orange-600 text-xs font-bold font-['Inter'] uppercase">Inventario</span>
+          <h1 className="text-2xl font-bold text-slate-800 font-['Inter']">Productos</h1>
+          <p className="text-xs text-slate-500 font-['Inter']">
+            Consulta los mismos productos y precios que aparecen al registrar pedidos.
+          </p>
+        </div>
+        {esAdministrador && (
+          <button type="button" onClick={() => { setAgregando(true); setAviso(""); }} className="px-4 h-10 bg-orange-600 text-white text-xs font-semibold rounded-md hover:bg-orange-700">
+            + Agregar producto
+          </button>
+        )}
       </div>
+
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {aviso && <p role="status" className="text-sm text-green-700 bg-green-50 rounded-md p-3">{aviso}</p>}
 
       {/* ---------- Stats ---------- */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -182,7 +188,7 @@ export default function Productos() {
           </span>
           <input
             type="text"
-            placeholder="Buscar producto o categoría..."
+            placeholder="Buscar producto..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="w-full h-10 pl-9 pr-3 rounded-md border border-slate-200 bg-white text-xs text-slate-800 outline-none focus:border-orange-500"
@@ -211,16 +217,15 @@ export default function Productos() {
       {/* ---------- Tabla ---------- */}
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full min-w-[650px]">
             <thead className="bg-slate-50">
               <tr>
                 {[
                   "Producto",
-                  "Categoría",
                   "Precio",
                   "Stock actual",
                   "Estado",
-                  "Acción",
+                  ...(esAdministrador ? ["Acción"] : []),
                 ].map((col) => (
                   <th
                     key={col}
@@ -232,15 +237,19 @@ export default function Productos() {
               </tr>
             </thead>
             <tbody>
-              {productosFiltrados.length === 0 ? (
+              {cargando ? (
+                <tr><td colSpan={esAdministrador ? 5 : 4} className="px-4 py-10 text-center text-sm text-slate-500">Cargando productos...</td></tr>
+              ) : productosFiltrados.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={esAdministrador ? 5 : 4}
                     className="px-4 py-10 text-center text-sm text-slate-500 font-['Inter']"
                   >
-                    {busqueda || filtroEstado !== "Todos"
-                      ? "No se encontraron productos con esos filtros."
-                      : "No hay productos en el catálogo."}
+                    {error
+                      ? "No se pudo mostrar el catálogo."
+                      : (busqueda || filtroEstado !== "Todos")
+                        ? "No se encontraron productos con esos filtros."
+                        : "No hay productos en el catálogo."}
                   </td>
                 </tr>
               ) : (
@@ -255,19 +264,14 @@ export default function Productos() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 bg-slate-50 rounded-md flex items-center justify-center text-lg shrink-0">
-                            {p.icono}
+                            {(p.imagen || imagenDeProducto(p.nombre))
+                              ? <img src={p.imagen || imagenDeProducto(p.nombre)} alt="" className="w-full h-full object-cover rounded-md" />
+                              : "🍽️"}
                           </div>
                           <span className="text-xs font-semibold text-slate-800 font-['Inter']">
                             {p.nombre}
                           </span>
                         </div>
-                      </td>
-
-                      {/* Categoría */}
-                      <td className="px-4 py-3">
-                        <span className="inline-block px-2.5 py-1 rounded bg-slate-100 text-slate-700 text-xs font-medium font-['Inter']">
-                          {p.categoria}
-                        </span>
                       </td>
 
                       {/* Precio */}
@@ -290,7 +294,7 @@ export default function Productos() {
                       </td>
 
                       {/* Acción */}
-                      <td className="px-4 py-3">
+                      {esAdministrador && <td className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => setEditando(p)}
@@ -298,7 +302,7 @@ export default function Productos() {
                         >
                           Editar
                         </button>
-                      </td>
+                      </td>}
                     </tr>
                   );
                 })
@@ -314,8 +318,7 @@ export default function Productos() {
           i
         </div>
         <p className="flex-1 text-xs text-blue-800 font-['Inter']">
-          Los cambios de precio o stock quedan registrados en el historial del
-          sistema.
+          Los precios y existencias se consultan del catálogo real.
         </p>
         <span className="text-xs font-semibold text-slate-800 font-['Inter']">
           Mostrando {productosFiltrados.length} de {productos.length}
@@ -329,6 +332,9 @@ export default function Productos() {
           onClose={() => setEditando(null)}
           onGuardar={handleGuardar}
         />
+      )}
+      {agregando && (
+        <AgregarProducto onClose={() => setAgregando(false)} onGuardar={handleAgregar} />
       )}
     </div>
   );

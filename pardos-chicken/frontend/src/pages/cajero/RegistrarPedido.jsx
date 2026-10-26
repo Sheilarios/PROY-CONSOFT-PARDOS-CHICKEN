@@ -73,7 +73,7 @@ export default function RegistrarPedido() {
     pedidosService.listarProductos()
       .then((lista) => setProductos(lista.map((p) => ({
         id: p.id,
-        imagen: imagenDeProducto(p.nombre),
+        imagen: p.imagen || imagenDeProducto(p.nombre),
         nombre: p.nombre,
         precio: Number(p.precio_unitario),
         stock: p.stock_disponible,
