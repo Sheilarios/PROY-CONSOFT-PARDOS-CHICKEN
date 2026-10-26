@@ -4,6 +4,10 @@ Proyecto con Django, Django REST Framework y MySQL en el backend, y React,
 Vite y Axios en el frontend. El diseño por roles de la rama `main` se integró
 con las funciones y pruebas implementadas hasta el Capítulo 6.5.
 
+Para ejecutar el proyecto en otra computadora, empieza por
+[Instalación y ejecución local](#instalación-y-ejecución-local) y consulta
+[Problemas frecuentes](#problemas-frecuentes) si aparece algún error.
+
 ## Estructura del proyecto
 
 ```text
@@ -141,7 +145,7 @@ administrador. La interrupción de un pedido que ya está en preparación
 ## Incidencias y anulación temprana
 
 El cajero puede registrar una incidencia en un pedido **Registrado** o **En
-cola** desde la confirmación o el detalle. La API guarda el tipo, la descripción,
+cola** desde el detalle del pedido. La API guarda el tipo, la descripción,
 el usuario y la fecha; el administrador los consulta en **Historial**. Desde
 **En preparación** en adelante se rechaza el registro de incidencias.
 
@@ -209,9 +213,16 @@ deshabilitados para evitar cambios arbitrarios de estado.
 
 ### Requisitos previos
 
-- Git, Python, MySQL Server, MySQL Workbench, Node.js y npm.
-- Python 3.12 es la versión indicada en la guía original; el repositorio no
-  impone una versión exacta de Python.
+- Git, **Python 3.12**, MySQL Server, un cliente como MySQL Workbench, Node.js y npm.
+- El backend fija `Django==5.1.2`. Usa Python 3.12 para este proyecto: Python
+  3.14 no figura entre las [versiones compatibles con Django
+  5.1](https://docs.djangoproject.com/en/5.1/releases/5.1/#python-compatibility)
+  y puede fallar al abrir formularios del administrador.
+
+En PowerShell, comprueba la versión instalada con `py -3.12 --version`. Si no
+aparece, instálala con `winget install --id Python.Python.3.12 --exact --source winget`
+y abre una terminal nueva antes de continuar. Python 3.14 puede permanecer
+instalado; el entorno virtual se creará explícitamente con 3.12.
 
 ### Clonar el repositorio
 
@@ -243,25 +254,65 @@ Desde `pardos-chicken/`:
 
 ```powershell
 cd backend
-python -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python --version
 python -m pip install -r requirements.txt
+```
+
+Estos comandos se ejecutan desde `backend/`, donde está `manage.py`.
+`python --version` debe mostrar `3.12.x` después de activar el entorno. Solo
+si todavía no existe `backend/.env`, créalo con:
+
+```powershell
 Copy-Item .env.example .env
 ```
 
-Edita `backend/.env`: establece una `SECRET_KEY` propia y reemplaza
-`TU_CONTRASENA` en `DATABASE_URL` por la contraseña del usuario MySQL. No
-subas el archivo `.env` al repositorio.
+Edita **`backend/.env`**, no `.env.example`: establece una `SECRET_KEY` propia
+y reemplaza `TU_CONTRASENA` en `DATABASE_URL` por la contraseña del usuario
+MySQL. La dirección tiene esta estructura:
+
+```text
+mysql://USUARIO_MYSQL:CONTRASENA@SERVIDOR:PUERTO/NOMBRE_BASE
+```
+
+En el ejemplo del proyecto, `pardos_app` es el usuario de MySQL,
+`pardos_chicken_db` es el nombre de la base, `localhost` es la computadora
+actual y `3306` es el puerto. Si creaste otros nombres o usas otro puerto,
+ajusta esos valores. La cuenta de MySQL no es la cuenta para iniciar sesión
+como cajero o administrador. Mantén las contraseñas solo en `.env`: este
+archivo está excluido de Git, mientras que `.env.example` es una plantilla
+compartida que debe conservar `TU_CONTRASENA`.
+
+Antes de migrar, comprueba a qué base apunta Django sin mostrar la contraseña:
+
+```powershell
+python manage.py shell -c "from django.conf import settings; print(settings.DATABASES['default']['ENGINE']); print(settings.DATABASES['default']['NAME'])"
+```
+
+Debe mostrar `django.db.backends.mysql` y el nombre de tu base. Si muestra
+`django.db.backends.sqlite3`, revisa que el archivo se llame exactamente
+`backend/.env` y que `DATABASE_URL` esté configurada allí: Django usa SQLite
+por defecto cuando falta esa variable.
 
 ### Ejecutar migraciones e importar datos iniciales
 
-Cada integrante usa su propia base de datos local: el repositorio no incluye
-un volcado SQL, pedidos anteriores ni contraseñas. Las migraciones crean las
-tablas y las fixtures cargan los cuatro productos de ejemplo junto con sus
-insumos y recetas de prueba:
+Cada integrante usa su propia base de datos local. Aunque todas se llamen
+`pardos_chicken_db`, `localhost` apunta a una computadora diferente en cada
+caso. El repositorio no incluye un volcado SQL, clientes, pedidos anteriores,
+usuarios, productos agregados manualmente ni contraseñas. Las migraciones
+crean o actualizan las tablas, pero no copian esos registros entre compañeros:
 
 ```powershell
 python manage.py migrate
+```
+
+`No migrations to apply` indica que esa base ya está actualizada. Cambiar o
+recrear el entorno virtual no borra los datos de MySQL. Para una **base nueva**,
+carga los cuatro productos de ejemplo, sus insumos y recetas de prueba, y
+crea una cuenta administradora:
+
+```powershell
 python manage.py loaddata apps/pedidos/fixtures/productos_demo.json
 python manage.py loaddata apps/pedidos/fixtures/insumos_demo.json
 python manage.py createsuperuser
@@ -270,7 +321,8 @@ python manage.py createsuperuser
 Estas cargas de ejemplo y `createsuperuser` están pensados para una base nueva.
 En una base existente, ejecuta `migrate` y añade solo los datos que falten
 desde el administrador; repetir las fixtures puede restablecer el stock de
-prueba.
+prueba. Abrir un volcado SQL en MySQL Workbench tampoco importa datos por sí
+solo; ejecutar uno que contenga `DROP TABLE` puede reemplazar tablas existentes.
 
 ### Crear usuarios para cada rol
 
@@ -280,6 +332,9 @@ En **Usuarios → Añadir usuario**, asigna un nombre de usuario y una contrase�
 selecciona el **Rol del sistema** (por ejemplo, **Personal de caja** o
 **Administrador / Gerente**) y guarda. Los cajeros no necesitan permisos de
 *staff* ni de superusuario para usar su pantalla del frontend.
+
+Si Django avisa que el nombre de usuario ya existe, elige otro. Usa una
+contraseña distinta del nombre de usuario para que supere la validación.
 
 Cada compañero repite estos pasos en su propia computadora y elige sus propias
 credenciales. El usuario MySQL `pardos_app` solo conecta Django a la base;
@@ -293,21 +348,25 @@ python manage.py runserver
 ```
 
 La API queda en `http://127.0.0.1:8000/api/` y su documentación en
-`http://127.0.0.1:8000/api/docs/`.
+`http://127.0.0.1:8000/api/docs/`. Deja esta terminal abierta mientras usas
+la aplicación.
 
 ### Ejecutar el frontend
 
-En otra terminal, desde `pardos-chicken/`:
+En **otra terminal**, desde `pardos-chicken/`:
 
 ```powershell
 cd frontend
 npm install
-Copy-Item .env.example .env
 npm run dev
 ```
 
 La aplicación queda disponible en `http://localhost:5173`. El archivo `.env.example`
-apunta a `http://127.0.0.1:8000/api` mediante `VITE_API_URL`.
+apunta a `http://127.0.0.1:8000/api` mediante `VITE_API_URL`. `npm install`
+descarga Vite y las demás dependencias; ejecútalo la primera vez y cuando
+cambien las dependencias del frontend. Si necesitas configurar la dirección de
+la API y aún no existe `frontend/.env`, crea ese archivo con
+`Copy-Item .env.example .env` desde `frontend/`.
 
 ### Inicio de sesión
 
@@ -329,14 +388,35 @@ los permisos de MySQL para la base de pruebas indicados arriba.
 
 ## Problemas frecuentes
 
+- **`manage.py` no se encuentra:** entra a `pardos-chicken/backend/` antes de
+  ejecutar `python manage.py ...`.
 - **Error de conexión a MySQL:** verifica que el servidor esté activo y que
   `DATABASE_URL` en `backend/.env` coincida con el usuario, contraseña y base.
+- **Las migraciones fueron a SQLite:** comprueba el motor con el comando de
+  arriba. Configura `backend/.env` y ejecuta `migrate` de nuevo para MySQL.
+- **`No migrations to apply`:** esa base ya tiene las migraciones aplicadas;
+  todavía puede necesitar datos iniciales o usuarios.
+- **No aparecen clientes o productos de otro compañero:** cada `localhost`
+  corresponde a su propia base. Migrar no copia datos; registra los datos
+  necesarios en esta instalación o planifica una copia de datos por separado.
 - **Catálogo vacío:** carga `apps/pedidos/fixtures/productos_demo.json` después
-  de ejecutar las migraciones.
+  de ejecutar las migraciones solo si la base es nueva.
+- **`vite` no se reconoce:** desde `frontend/`, ejecuta `npm install` y después
+  `npm run dev`.
+- **`npm install` muestra avisos de `npm audit`:** la instalación puede haber
+  terminado correctamente; comprueba si `npm run dev` inicia Vite. Revisa las
+  actualizaciones de dependencias por separado antes de aplicar cambios
+  automáticos que puedan afectar el proyecto.
 - **El frontend no conecta con la API:** comprueba que Django esté ejecutándose
   y que `VITE_API_URL` en `frontend/.env` apunte a su dirección.
-- **No se puede iniciar sesión:** verifica las credenciales del usuario creado
-  con `createsuperuser`.
+- **Inicio de sesión rechazado (`401`):** verifica el usuario y la contraseña
+  creados en *esta* base MySQL. Las cuentas de otra computadora no se comparten
+  por Git. Para crear una cuenta administradora usa `createsuperuser`; si el
+  nombre ya existe y es tu cuenta local, puedes usar
+  `python manage.py changepassword NOMBRE_USUARIO`.
+- **Error al abrir “Añadir usuario” en Django Admin con Python 3.14:** crea un
+  entorno virtual nuevo con Python 3.12, instala de nuevo `requirements.txt`
+  y reinicia el backend. Los datos de MySQL permanecen en la base.
 
 ## Próximos incrementos
 
