@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { pedidosService } from "../../api/pedidosService";
+import { formatearFechaHora } from "../../utils/fechas";
 
 const ESTADOS = {
   REGISTRADO: "Registrado",
@@ -18,6 +19,19 @@ const TIPOS_INCIDENCIA = {
   ERROR_PRODUCTOS: "Producto o cantidad incorrectos",
   ERROR_MODALIDAD: "Modalidad de entrega incorrecta",
   ERROR_CLIENTE: "Datos del cliente incorrectos",
+  FALTA_INSUMOS: "Falta inesperada de insumos",
+  PRODUCTO_DANADO: "Producto dañado o en mal estado",
+  EQUIPO_AVERIADO: "Avería de equipo de cocina",
+  ERROR_PREPARACION: "Error en la preparación",
+  DEMORA_COCINA: "Demora inesperada",
+  OTRO_COCINA: "Otro motivo de cocina",
+  PEDIDO_INCOMPLETO: "Pedido incompleto",
+  PRODUCTO_INCORRECTO: "Producto incorrecto",
+  PRODUCTO_DANADO_DESPACHO: "Producto dañado",
+  REPARTIDOR_NO_DISPONIBLE: "Repartidor no disponible",
+  DEMORA_DESPACHO: "Demora en despacho",
+  PROBLEMA_ENTREGA: "Problema con la entrega",
+  OTRO_DESPACHO: "Otro motivo de despacho",
 };
 
 const AREAS = {
@@ -37,7 +51,7 @@ const ESTILO_ESTADO = {
 };
 
 function formatearFecha(valor) {
-  return new Date(valor).toLocaleString("es-PE", {
+  return formatearFechaHora(valor, {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -51,7 +65,7 @@ function fechaLocal(valor) {
   return anio + "-" + mes + "-" + dia;
 }
 
-function crearRegistros(pedidos, incidencias, ediciones) {
+function crearRegistros(pedidos, incidencias, ediciones, eventosDespacho) {
   const registros = [];
 
   pedidos.forEach((pedido) => {
@@ -114,6 +128,21 @@ function crearRegistros(pedidos, incidencias, ediciones) {
     });
   });
 
+  eventosDespacho.forEach((evento) => {
+    registros.push({
+      clave: "despacho-" + evento.id,
+      pedidoId: evento.pedido_id,
+      codigo: evento.pedido_codigo,
+      fecha: evento.fecha,
+      area: "Despacho",
+      tipo: evento.tipo === "VERIFICACION" ? "Verificación" : evento.tipo === "ASIGNACION" ? "Asignación" : "Despacho",
+      usuario: evento.usuario_nombre,
+      descripcion: evento.descripcion,
+      estado: ESTADOS[evento.pedido_estado] || evento.pedido_estado,
+      cliente: evento.pedido_cliente || "Sin nombre",
+    });
+  });
+
   return registros.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 }
 
@@ -121,6 +150,7 @@ export default function Historial() {
   const [pedidos, setPedidos] = useState([]);
   const [incidencias, setIncidencias] = useState([]);
   const [ediciones, setEdiciones] = useState([]);
+  const [eventosDespacho, setEventosDespacho] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [seleccionado, setSeleccionado] = useState(null);
@@ -132,13 +162,14 @@ export default function Historial() {
     setCargando(true);
     setError("");
     try {
-      const [respuestaPedidos, respuestaIncidencias, respuestaEdiciones] = await Promise.all([
+      const [respuestaPedidos, respuestaIncidencias, respuestaEdiciones, respuestaDespacho] = await Promise.all([
         pedidosService.listar(), pedidosService.listarIncidencias(),
-        pedidosService.listarEdiciones(),
+        pedidosService.listarEdiciones(), pedidosService.listarEventosDespacho(),
       ]);
       setPedidos(respuestaPedidos.results || respuestaPedidos);
       setIncidencias(respuestaIncidencias);
       setEdiciones(respuestaEdiciones);
+      setEventosDespacho(respuestaDespacho);
     } catch {
       setError("No se pudo cargar el historial.");
     } finally {
@@ -149,7 +180,8 @@ export default function Historial() {
   useEffect(() => { cargarHistorial(); }, [cargarHistorial]);
 
   const registros = useMemo(
-    () => crearRegistros(pedidos, incidencias, ediciones), [pedidos, incidencias, ediciones],
+    () => crearRegistros(pedidos, incidencias, ediciones, eventosDespacho),
+    [pedidos, incidencias, ediciones, eventosDespacho],
   );
 
   const registrosFiltrados = useMemo(() => registros.filter((registro) => {
@@ -173,7 +205,7 @@ export default function Historial() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Historial</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Pedidos, observaciones, ediciones e incidencias guardadas en el sistema.
+            Pedidos, observaciones, ediciones, despacho e incidencias guardadas en el sistema.
           </p>
         </div>
         <button
@@ -226,7 +258,7 @@ export default function Historial() {
           <FiltroSelect
             label="Tipo de registro"
             value={filtros.tipo}
-            options={["Todos", "Registro", "Observación", "Edición", "Incidencia"]}
+            options={["Todos", "Registro", "Observación", "Edición", "Incidencia", "Verificación", "Asignación", "Despacho"]}
             onChange={(valor) => setFiltros({ ...filtros, tipo: valor })}
           />
           <label className="flex flex-col gap-1 text-xs text-slate-500">

@@ -9,7 +9,9 @@ from apps.usuarios.models import Usuario
 
 @pytest.mark.django_db
 def test_pedido_pasa_de_cola_a_preparacion_y_luego_a_listo():
-    usuario = Usuario.objects.create_user(username="cocina_estados", password="12345678")
+    usuario = Usuario.objects.create_user(
+        username="cocina_estados", password="12345678", rol=Usuario.Rol.COCINERO
+    )
     api = APIClient()
     api.force_authenticate(user=usuario)
     pedido = Pedido.objects.create(

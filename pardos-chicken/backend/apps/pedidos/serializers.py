@@ -3,7 +3,10 @@ from django.db import transaction
 from pathlib import Path
 from PIL import Image
 
-from .models import Producto, Cliente, Pedido, DetallePedido, Incidencia, EdicionPedido
+from .models import (
+    Producto, Cliente, Pedido, DetallePedido, Incidencia, EdicionPedido,
+    Repartidor, EventoDespacho,
+)
 from . import validators
 
 
@@ -236,7 +239,7 @@ class PedidoRegistroSerializer(serializers.ModelSerializer):
                 cantidad=cantidad,
                 precio_unitario_congelado=producto.precio_unitario,
             )
-            # Reserva de stock (Regla 1 del diagrama de complejidad esencial)
+
             producto.stock_disponible -= cantidad
             producto.save(update_fields=["stock_disponible"])
 
@@ -272,6 +275,25 @@ class PedidoConsultaSerializer(serializers.ModelSerializer):
     registrado_por_nombre = serializers.CharField(
         source="registrado_por.get_full_name", read_only=True
     )
+    verificado_por_nombre = serializers.SerializerMethodField()
+    asignado_por_nombre = serializers.SerializerMethodField()
+    despachado_por_nombre = serializers.SerializerMethodField()
+    eventos_despacho = serializers.SerializerMethodField()
+
+    def get_verificado_por_nombre(self, pedido):
+        usuario = pedido.verificado_por
+        return (usuario.get_full_name() or usuario.username) if usuario else None
+
+    def get_despachado_por_nombre(self, pedido):
+        usuario = pedido.despachado_por
+        return (usuario.get_full_name() or usuario.username) if usuario else None
+
+    def get_asignado_por_nombre(self, pedido):
+        usuario = pedido.asignado_por
+        return (usuario.get_full_name() or usuario.username) if usuario else None
+
+    def get_eventos_despacho(self, pedido):
+        return EventoDespachoSerializer(pedido.eventos_despacho.all(), many=True).data
 
     class Meta:
         model = Pedido
@@ -292,7 +314,82 @@ class PedidoConsultaSerializer(serializers.ModelSerializer):
             "fecha_actualizacion",
             "hora_inicio_preparacion",
             "hora_fin_preparacion",
+            "verificado_por_nombre",
+            "fecha_verificacion",
+            "repartidor",
+            "repartidor_nombre",
+            "asignado_por_nombre",
+            "fecha_asignacion",
+            "despachado_por_nombre",
+            "fecha_despacho",
+            "eventos_despacho",
         ]
+
+    repartidor_nombre = serializers.CharField(source="repartidor.nombre", read_only=True)
+
+
+class RepartidorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Repartidor
+        fields = ["id", "nombre", "telefono", "zona", "activo", "disponible"]
+        read_only_fields = ["id", "activo", "disponible"]
+
+    def validate_nombre(self, nombre):
+        nombre = nombre.strip()
+        if not nombre:
+            raise serializers.ValidationError("Indica el nombre del repartidor.")
+        return nombre
+
+    def validate_telefono(self, telefono):
+        if not validators.TELEFONO_REGEX.match(telefono):
+            raise serializers.ValidationError("El teléfono debe tener 9 dígitos y empezar con 9.")
+        return telefono
+
+
+class EventoDespachoSerializer(serializers.ModelSerializer):
+    pedido_id = serializers.IntegerField(source="pedido.id", read_only=True)
+    pedido_codigo = serializers.CharField(source="pedido.codigo", read_only=True)
+    pedido_cliente = serializers.CharField(source="pedido.cliente_nombre", read_only=True)
+    pedido_estado = serializers.CharField(source="pedido.estado", read_only=True)
+    usuario_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventoDespacho
+        fields = [
+            "id", "pedido_id", "pedido_codigo", "pedido_cliente", "pedido_estado",
+            "tipo", "descripcion", "usuario_nombre", "fecha",
+        ]
+
+    def get_usuario_nombre(self, evento):
+        return evento.usuario.get_full_name() or evento.usuario.username
+
+
+class VerificacionPedidoEntradaSerializer(serializers.Serializer):
+    detalles_confirmados = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=False
+    )
+    empaque_confirmado = serializers.BooleanField()
+    observaciones_confirmadas = serializers.BooleanField()
+
+
+class AsignacionRepartidorEntradaSerializer(serializers.Serializer):
+    repartidor_id = serializers.IntegerField(min_value=1)
+
+
+class IncidenciaDespachoEntradaSerializer(serializers.Serializer):
+    pedido_id = serializers.IntegerField(min_value=1)
+    tipo = serializers.ChoiceField(
+        choices=[
+            Incidencia.Tipo.PEDIDO_INCOMPLETO,
+            Incidencia.Tipo.PRODUCTO_INCORRECTO,
+            Incidencia.Tipo.PRODUCTO_DANADO_DESPACHO,
+            Incidencia.Tipo.REPARTIDOR_NO_DISPONIBLE,
+            Incidencia.Tipo.DEMORA_DESPACHO,
+            Incidencia.Tipo.PROBLEMA_ENTREGA,
+            Incidencia.Tipo.OTRO_DESPACHO,
+        ]
+    )
+    descripcion = serializers.CharField(max_length=500, trim_whitespace=True)
 
 
 class IncidenciaSerializer(serializers.ModelSerializer):
@@ -333,6 +430,23 @@ class IncidenciaSerializer(serializers.ModelSerializer):
     def get_registrado_por_nombre(self, incidencia):
         usuario = incidencia.registrado_por
         return usuario.get_full_name() or usuario.username
+
+
+class IncidenciaCocinaEntradaSerializer(serializers.Serializer):
+    """Datos que cocina puede enviar sin modificar el pedido."""
+
+    pedido_id = serializers.IntegerField(min_value=1)
+    tipo = serializers.ChoiceField(
+        choices=[
+            Incidencia.Tipo.FALTA_INSUMOS,
+            Incidencia.Tipo.PRODUCTO_DANADO,
+            Incidencia.Tipo.EQUIPO_AVERIADO,
+            Incidencia.Tipo.ERROR_PREPARACION,
+            Incidencia.Tipo.DEMORA_COCINA,
+            Incidencia.Tipo.OTRO_COCINA,
+        ]
+    )
+    descripcion = serializers.CharField(max_length=500, trim_whitespace=True)
 
 
 class EdicionPedidoSerializer(serializers.ModelSerializer):

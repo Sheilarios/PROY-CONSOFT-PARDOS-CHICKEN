@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { pedidosService } from "../../api/pedidosService";
+import { fecha } from "../despacho/despachoUtils";
 
 const MODALIDADES = { SALON: "Salón", DELIVERY: "Delivery", RECOJO: "Recojo" };
 const ESTADOS = {
@@ -16,6 +17,9 @@ export default function DetallePedido() {
   const navigate = useNavigate();
   const location = useLocation();
   const rutaPedidos = location.pathname.replace(/\/detalle\/?$/, "");
+  const esDespacho = location.pathname.startsWith("/despacho/");
+  const mostrarDespacho = esDespacho || location.pathname.startsWith("/admin/");
+  const esCaja = location.pathname.startsWith("/cajero/");
   const [params] = useSearchParams();
   const id = params.get("id");
   const [pedido, setPedido] = useState(null);
@@ -89,6 +93,15 @@ export default function DetallePedido() {
             <Dato label="Registrado" valor={new Date(pedido.fecha_creacion).toLocaleString("es-PE")} />
             {pedido.direccion_delivery && <Dato label="Dirección" valor={pedido.direccion_delivery} />}
             {pedido.observaciones && <Dato label="Observaciones" valor={pedido.observaciones} />}
+            {mostrarDespacho && <Dato label="Inicio de preparación" valor={fecha(pedido.hora_inicio_preparacion)} />}
+            {mostrarDespacho && <Dato label="Fin de preparación" valor={fecha(pedido.hora_fin_preparacion)} />}
+            {mostrarDespacho && <Dato label="Verificado por" valor={pedido.verificado_por_nombre || "Pendiente"} />}
+            {mostrarDespacho && <Dato label="Fecha de verificación" valor={fecha(pedido.fecha_verificacion)} />}
+            {mostrarDespacho && <Dato label="Repartidor" valor={pedido.repartidor_nombre || "No asignado"} />}
+            {mostrarDespacho && <Dato label="Asignado por" valor={pedido.asignado_por_nombre || "Pendiente"} />}
+            {mostrarDespacho && <Dato label="Fecha de asignación" valor={fecha(pedido.fecha_asignacion)} />}
+            {mostrarDespacho && <Dato label="Despachado por" valor={pedido.despachado_por_nombre || "Pendiente"} />}
+            {mostrarDespacho && <Dato label="Fecha de despacho" valor={fecha(pedido.fecha_despacho)} />}
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -112,12 +125,31 @@ export default function DetallePedido() {
             </div>
           </div>
 
-          {pedido.estado === "REGISTRADO" && (
+          {mostrarDespacho && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h2 className="text-base font-bold text-slate-800 mb-3">Historial del pedido</h2>
+              <div className="flex flex-col gap-2 text-sm text-slate-700">
+                <p>Registrado: {fecha(pedido.fecha_creacion)}</p>
+                {pedido.hora_inicio_preparacion && <p>Preparación iniciada: {fecha(pedido.hora_inicio_preparacion)}</p>}
+                {pedido.hora_fin_preparacion && <p>Preparación terminada: {fecha(pedido.hora_fin_preparacion)}</p>}
+                {pedido.eventos_despacho?.map((evento) => <p key={evento.id}>{fecha(evento.fecha)} · {evento.descripcion} ({evento.usuario_nombre})</p>)}
+              </div>
+            </div>
+          )}
+
+          {esDespacho && <div className="flex flex-wrap gap-2">
+            {pedido.estado === "LISTO" && !pedido.fecha_verificacion && <button type="button" onClick={() => navigate("/despacho/verificacion?id=" + pedido.id)} className="btn-accion">Verificar pedido</button>}
+            {pedido.estado === "LISTO" && pedido.fecha_verificacion && pedido.modalidad_entrega === "DELIVERY" && !pedido.repartidor && <button type="button" onClick={() => navigate("/despacho/asignar-repartidor?id=" + pedido.id)} className="btn-accion">Asignar repartidor</button>}
+            {pedido.estado === "LISTO" && pedido.fecha_verificacion && (pedido.modalidad_entrega !== "DELIVERY" || pedido.repartidor) && <button type="button" onClick={() => navigate("/despacho/confirmar?id=" + pedido.id)} className="btn-accion">Confirmar despacho</button>}
+            {pedido.estado === "LISTO" && !pedido.fecha_verificacion && <button type="button" onClick={() => navigate("/despacho/incidencias/nueva?id=" + pedido.id)} className="btn-secundario">Registrar incidencia</button>}
+          </div>}
+
+          {esCaja && pedido.estado === "REGISTRADO" && (
             <button type="button" onClick={enviarAProduccion} disabled={enviando} className="self-start px-4 py-2 bg-orange-600 text-white text-xs font-semibold rounded-md disabled:opacity-50">
               {enviando ? "Enviando..." : "Enviar a cocina"}
             </button>
           )}
-          {location.pathname.startsWith("/cajero/") && ["REGISTRADO", "EN_COLA"].includes(pedido.estado) && (
+          {esCaja && ["REGISTRADO", "EN_COLA"].includes(pedido.estado) && (
             <button
               type="button"
               onClick={() => navigate(`/cajero/incidencias/nueva?pedido=${pedido.id}`)}

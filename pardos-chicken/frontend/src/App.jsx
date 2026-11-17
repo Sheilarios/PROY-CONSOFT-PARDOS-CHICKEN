@@ -39,13 +39,14 @@ import ConfirmarDespacho from "./pages/despacho/ConfirmarDespacho";
 import AsignacionRepartidor from "./pages/despacho/AsignacionRepartidor";
 import VerificacionPedido from "./pages/despacho/VerificacionPedido";
 import Repartidores from "./pages/despacho/Repartidores";
+import PedidosDespacho from "./pages/despacho/PedidosDespacho";
+import IncidenciaDespacho from "./pages/despacho/IncidenciaDespacho";
 
 // ----------------------------------------------------------------------
 // ADMINISTRADOR
 // ----------------------------------------------------------------------
 import Resumen from "./pages/administrador/Resumen";
 import DetalleProduccion from "./pages/administrador/DetalleProduccion";
-import DespachoAdmin from "./pages/administrador/DespachoAdmin";
 import Historial from "./pages/administrador/Historial";
 import Reportes from "./pages/administrador/Reportes";
 import Configuracion from "./pages/administrador/Configuracion";
@@ -112,8 +113,9 @@ export default function App() {
           />
           <Route path="/despacho/confirmar" element={<ConfirmarDespacho />} />
           <Route path="/despacho/repartidores" element={<Repartidores />} />
-          <Route path="/despacho/pedidos" element={<Pedidos />} />
+          <Route path="/despacho/pedidos" element={<PedidosDespacho />} />
           <Route path="/despacho/pedidos/detalle" element={<DetallePedido />} />
+          <Route path="/despacho/incidencias/nueva" element={<IncidenciaDespacho />} />
 
           {/* ------------------------------------------------- */}
           {/* ADMINISTRADOR                                     */}
@@ -124,7 +126,7 @@ export default function App() {
             path="/admin/produccion/detalle"
             element={<DetalleProduccion />}
           />
-          <Route path="/admin/despacho" element={<DespachoAdmin />} />
+          <Route path="/admin/despacho" element={<PanelDespacho />} />
           <Route path="/admin/historial" element={<Historial />} />
           <Route path="/admin/reportes" element={<Reportes />} />
           <Route path="/admin/configuracion" element={<Configuracion />} />

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Producto, Insumo, RecetaInsumo, Cliente, Pedido, DetallePedido,
-    Incidencia, EdicionPedido,
+    Incidencia, EdicionPedido, Repartidor, EventoDespacho,
 )
 
 
@@ -64,6 +64,28 @@ class IncidenciaAdmin(admin.ModelAdmin):
 class EdicionPedidoAdmin(admin.ModelAdmin):
     list_display = ["pedido", "modificado_por", "fecha", "total_anterior", "total_nuevo"]
     search_fields = ["pedido__codigo", "modificado_por__username"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Repartidor)
+class RepartidorAdmin(admin.ModelAdmin):
+    list_display = ["nombre", "telefono", "zona", "activo", "disponible"]
+    list_filter = ["activo", "disponible"]
+    search_fields = ["nombre", "telefono"]
+
+
+@admin.register(EventoDespacho)
+class EventoDespachoAdmin(admin.ModelAdmin):
+    list_display = ["pedido", "tipo", "usuario", "fecha"]
+    list_filter = ["tipo"]
 
     def has_add_permission(self, request):
         return False

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pedidosService } from "../../api/pedidosService";
+import { formatearHora } from "../../utils/fechas";
 import imagenCuartoPollo from "../../assets/productos/cuarto-pollo.png";
 import imagenPolloEntero from "../../assets/productos/pollo-entero.png";
 import imagenPapasFritas from "../../assets/productos/papas-fritas.png";
@@ -244,9 +245,7 @@ export default function RegistrarPedido() {
       const pedidoCreado = {
         id: respuesta.codigo,
         pedidoId: respuesta.id,
-        hora: new Date(respuesta.fecha_creacion).toLocaleTimeString("es-PE", {
-          hour: "2-digit", minute: "2-digit",
-        }),
+        hora: formatearHora(respuesta.fecha_creacion),
         modalidad: MODALIDADES.find((m) => m.id === cliente.modalidad)?.label,
         total: Number(respuesta.total),
         cantidadArticulos: totalArticulos,
