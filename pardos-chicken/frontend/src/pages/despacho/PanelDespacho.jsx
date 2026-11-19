@@ -1,376 +1,118 @@
-import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { pedidosService } from "../../api/pedidosService";
+import { fecha, mensajeError, MODALIDADES, productos } from "./despachoUtils";
 
-// ----------------------------------------------------------------------
-// Datos de ejemplo
-// ----------------------------------------------------------------------
-const PEDIDOS_INICIALES = [
-  // --- PENDIENTES DE VERIFICAR ---
-  {
-    id: "#P0013",
-    modalidad: "Delivery",
-    hora: "11:45",
-    estado: "Por verificar",
-    columna: "pendientes",
-    productos: [
-      { nombre: "Pollo a la brasa", cantidad: 1, verificado: false },
-      { nombre: "Papas familiares", cantidad: 1, verificado: false },
-      { nombre: "Gaseosa 1.5 L", cantidad: 1, verificado: false },
-    ],
-    observaciones: "Sin salsas, extra papas.",
-  },
-  // --- LISTOS PARA DESPACHAR ---
-  {
-    id: "#P0011",
-    modalidad: "Delivery",
-    hora: "11:40",
-    estado: "Listo",
-    columna: "listos",
-    productos: [
-      { nombre: "Pollo a la brasa", cantidad: 1, verificado: true },
-      { nombre: "Papas familiares", cantidad: 1, verificado: true },
-      { nombre: "Gaseosa 1.5 L", cantidad: 1, verificado: true },
-    ],
-  },
-  {
-    id: "#P0010",
-    modalidad: "Recojo",
-    hora: "11:30",
-    estado: "Listo",
-    columna: "listos",
-    productos: [
-      { nombre: "Pollo entero", cantidad: 1, verificado: true },
-      { nombre: "Papas familiares", cantidad: 1, verificado: true },
-    ],
-  },
-  // --- DESPACHADOS ---
-  {
-    id: "#P0008",
-    modalidad: "Salón",
-    hora: "11:20",
-    estado: "Despachado",
-    columna: "despachados",
-    productos: [
-      { nombre: "1/4 Pollo", cantidad: 1, verificado: true },
-      { nombre: "Ensalada", cantidad: 1, verificado: true },
-      { nombre: "Gaseosa 1.5 L", cantidad: 1, verificado: true },
-    ],
-    meta: {
-      entregadoEn: "Mesa 5",
-      horaDespacho: "11:28",
-      atendidoPor: "Juan Pérez",
-    },
-  },
-];
-
-const MODALIDAD_STYLES = {
-  Delivery: "bg-rose-50 text-rose-700",
-  Recojo: "bg-indigo-50 text-blue-800",
-  Salón: "bg-yellow-50 text-yellow-800",
-};
-
-// ----------------------------------------------------------------------
-// Componente
-// ----------------------------------------------------------------------
 export default function PanelDespacho() {
   const navigate = useNavigate();
-  const [pedidos, setPedidos] = useState(PEDIDOS_INICIALES);
-  const [filtroModalidad, setFiltroModalidad] = useState("Todas");
+  const location = useLocation();
+  const esDespacho = localStorage.getItem("rol") === "despacho";
+  const [pedidos, setPedidos] = useState([]);
+  const [modalidad, setModalidad] = useState("Todas");
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
 
-  // Filtrar por modalidad (aplica a las 3 columnas)
-  const pedidosFiltrados = useMemo(() => {
-    if (filtroModalidad === "Todas") return pedidos;
-    return pedidos.filter((p) => p.modalidad === filtroModalidad);
-  }, [pedidos, filtroModalidad]);
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setError("");
+    try {
+      setPedidos(await pedidosService.listarDespacho());
+    } catch (err) {
+      setError(mensajeError(err, "No se pudo cargar el panel de despacho."));
+    } finally {
+      setCargando(false);
+    }
+  }, []);
 
-  const porColumna = (columna) =>
-    pedidosFiltrados.filter((p) => p.columna === columna);
+  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    window.addEventListener("focus", cargar);
+    return () => window.removeEventListener("focus", cargar);
+  }, [cargar]);
 
-  // ---------- Acciones ----------
-  const verificarPedido = (id) => {
-    navigate(`/despacho/verificacion?id=${encodeURIComponent(id)}`);
-  };
-
-  const asignarRepartidor = (id) => {
-    navigate(`/despacho/asignar-repartidor?id=${encodeURIComponent(id)}`);
-  };
-
-  const marcarDespachado = (id) => {
-    // Simulación — cuando tengas backend:
-    // await pedidosService.confirmarDespacho(id);
-    setPedidos((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, columna: "despachados", estado: "Despachado" }
-          : p,
-      ),
-    );
-  };
-
-  const confirmarDespacho = (id) => {
-    navigate(`/despacho/confirmar?id=${encodeURIComponent(id)}`);
-  };
+  const visibles = useMemo(() => pedidos.filter(
+    (pedido) => modalidad === "Todas" || pedido.modalidad_entrega === modalidad
+  ), [pedidos, modalidad]);
+  const pendientes = visibles.filter((p) => p.estado === "LISTO" && !p.fecha_verificacion);
+  const listos = visibles.filter((p) => p.estado === "LISTO" && p.fecha_verificacion);
+  const despachados = visibles.filter((p) => p.estado === "DESPACHADO");
+  const ir = (ruta, pedido) => navigate(ruta + "?id=" + encodeURIComponent(pedido.id));
+  const detalle = (pedido) => ir(esDespacho ? "/despacho/pedidos/detalle" : "/admin/pedidos/detalle", pedido);
 
   return (
-    <div className="flex flex-col w-full gap-4">
-      {/* ---------- Encabezado ---------- */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold text-slate-800 font-['Inter']">
-            Panel de despacho
-          </h1>
-          <p className="text-sm text-slate-500 font-['Inter']">
-            Gestiona y controla los pedidos desde la cocina hasta su entrega
-            final.
-          </p>
+    <div className="flex flex-col gap-4 w-full">
+      <div className="flex flex-wrap justify-between gap-3 items-start">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Panel de despacho</h1>
+          <p className="text-sm text-slate-500">Pedidos preparados por Cocina y seguimiento de las entregas.</p>
         </div>
-
-        <select
-          value={filtroModalidad}
-          onChange={(e) => setFiltroModalidad(e.target.value)}
-          className="h-10 px-3 rounded-md border border-slate-200 bg-white text-xs text-slate-800 outline-none focus:border-orange-500"
-        >
+        <select value={modalidad} onChange={(e) => setModalidad(e.target.value)} className="h-10 px-3 rounded-md border border-slate-200 bg-white text-xs">
           <option value="Todas">Todas las modalidades</option>
-          <option value="Delivery">Delivery</option>
-          <option value="Recojo">Recojo</option>
-          <option value="Salón">Salón</option>
+          {Object.entries(MODALIDADES).map(([codigo, nombre]) => <option key={codigo} value={codigo}>{nombre}</option>)}
         </select>
       </div>
-
-      {/* ---------- Grid 3 columnas ---------- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* ============ Columna 1: Por verificar ============ */}
-        <ColumnaDespacho
-          titulo="Pendientes de verificar"
-          pedidos={porColumna("pendientes")}
-        >
-          {(p) => (
-            <TarjetaPedido
-              pedido={p}
-              estadoBadge="Por verificar"
-              estadoClase="bg-orange-100 text-yellow-700"
-              onAccion={() => verificarPedido(p.id)}
-              accionLabel="Verificar pedido"
-              onSecundario={() =>
-                navigate(
-                  `/despacho/pedidos/detalle?id=${encodeURIComponent(p.id)}`,
-                )
-              }
-              secundarioLabel="Ver detalles"
-            />
+      <button type="button" onClick={cargar} disabled={cargando} className="self-start px-4 py-2 rounded-md bg-orange-600 text-white text-xs font-semibold disabled:opacity-50">Actualizar panel</button>
+      {cargando && <p className="text-xs text-slate-500">Cargando pedidos...</p>}
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {location.state?.aviso && <p role="status" className="text-sm text-green-700">{location.state.aviso}</p>}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <Columna titulo="Pendientes de verificación" pedidos={pendientes} vacio="No hay pedidos por verificar.">
+          {(pedido) => (
+            <Tarjeta pedido={pedido} detalle={() => detalle(pedido)}>
+              {esDespacho && <button type="button" onClick={() => ir("/despacho/verificacion", pedido)} className="btn-accion">Verificar pedido</button>}
+              {esDespacho && <button type="button" onClick={() => ir("/despacho/incidencias/nueva", pedido)} className="btn-secundario">Registrar incidencia</button>}
+            </Tarjeta>
           )}
-        </ColumnaDespacho>
-
-        {/* ============ Columna 2: Listos para despachar ============ */}
-        <ColumnaDespacho
-          titulo="Listos para despachar"
-          pedidos={porColumna("listos")}
-        >
-          {(p) => (
-            <TarjetaPedido
-              pedido={p}
-              estadoBadge="Listo"
-              estadoClase="bg-green-100 text-green-700"
-              onAccion={
-                p.modalidad === "Delivery"
-                  ? () => asignarRepartidor(p.id)
-                  : () => marcarDespachado(p.id)
-              }
-              accionLabel={
-                p.modalidad === "Delivery"
-                  ? "Asignar repartidor"
-                  : "Marcar despachado"
-              }
-              onSecundario={
-                p.modalidad === "Delivery"
-                  ? () => confirmarDespacho(p.id)
-                  : undefined
-              }
-              secundarioLabel="Confirmar despacho"
-            />
+        </Columna>
+        <Columna titulo="Listos para despachar" pedidos={listos} vacio="No hay pedidos verificados pendientes.">
+          {(pedido) => (
+            <Tarjeta pedido={pedido} detalle={() => detalle(pedido)}>
+              {esDespacho && pedido.modalidad_entrega === "DELIVERY" && !pedido.repartidor && (
+                <button type="button" onClick={() => ir("/despacho/asignar-repartidor", pedido)} className="btn-accion">Asignar repartidor</button>
+              )}
+              {esDespacho && (pedido.modalidad_entrega !== "DELIVERY" || pedido.repartidor) && (
+                <button type="button" onClick={() => ir("/despacho/confirmar", pedido)} className="btn-accion">Confirmar despacho</button>
+              )}
+            </Tarjeta>
           )}
-        </ColumnaDespacho>
-
-        {/* ============ Columna 3: Despachados ============ */}
-        <ColumnaDespacho
-          titulo="Despachados"
-          pedidos={porColumna("despachados")}
-        >
-          {(p) => (
-            <TarjetaPedido
-              pedido={p}
-              estadoBadge="Despachado"
-              estadoClase="bg-violet-100 text-purple-800"
-              meta={p.meta}
-            />
+        </Columna>
+        <Columna titulo="Despachados" pedidos={despachados} vacio="Aún no hay pedidos despachados.">
+          {(pedido) => (
+            <Tarjeta pedido={pedido} detalle={() => detalle(pedido)} />
           )}
-        </ColumnaDespacho>
-      </div>
-
-      {/* ---------- Banner inferior ---------- */}
-      <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-md px-4 py-3">
-        <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center text-blue-800 font-bold text-sm">
-          i
-        </div>
-        <p className="flex-1 text-xs text-blue-800 font-['Inter']">
-          Despacha primero los pedidos listos según modalidad y hora de salida.
-        </p>
-        <span className="text-xs font-semibold text-slate-800 font-['Inter']">
-          {pedidos.filter((p) => p.columna !== "despachados").length} pedidos
-          activos
-        </span>
+        </Columna>
       </div>
     </div>
   );
 }
 
-// ----------------------------------------------------------------------
-// Subcomponente: Columna
-// ----------------------------------------------------------------------
-function ColumnaDespacho({ titulo, pedidos, children }) {
+function Columna({ titulo, pedidos, vacio, children }) {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 flex flex-col overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200">
-        <div className="w-1 h-7 bg-orange-600 rounded" />
-        <h2 className="text-base font-bold text-slate-800 font-['Inter']">
-          {titulo} ({pedidos.length})
-        </h2>
+    <section className="bg-white border border-slate-200 rounded-lg p-4">
+      <h2 className="text-base font-bold text-slate-800 mb-3">{titulo} <span className="text-orange-600">({pedidos.length})</span></h2>
+      <div className="flex flex-col gap-3">
+        {pedidos.length ? pedidos.map((pedido) => <div key={pedido.id}>{children(pedido)}</div>) : <p className="text-sm text-slate-500 py-6 text-center">{vacio}</p>}
       </div>
-
-      <div className="flex-1 p-4 flex flex-col gap-3">
-        {pedidos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <span className="text-3xl mb-2">📭</span>
-            <p className="text-xs text-slate-500 font-['Inter']">
-              Sin pedidos en esta columna.
-            </p>
-          </div>
-        ) : (
-          pedidos.map((p) => (
-            <React.Fragment key={p.id}>{children(p)}</React.Fragment>
-          ))
-        )}
-      </div>
-    </div>
+    </section>
   );
 }
 
-// ----------------------------------------------------------------------
-// Subcomponente: Tarjeta de pedido
-// ----------------------------------------------------------------------
-function TarjetaPedido({
-  pedido,
-  estadoBadge,
-  estadoClase,
-  onAccion,
-  accionLabel,
-  onSecundario,
-  secundarioLabel,
-  meta,
-}) {
+function Tarjeta({ pedido, detalle, children }) {
   return (
-    <div className="border border-slate-200 rounded-lg p-3 flex flex-col gap-3">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-base font-bold text-slate-800 font-['Inter']">
-          {pedido.id}
-        </span>
-        <span
-          className={`px-2 py-1 rounded text-xs font-semibold font-['Inter'] ${
-            MODALIDAD_STYLES[pedido.modalidad] || "bg-slate-100 text-slate-800"
-          }`}
-        >
-          {pedido.modalidad}
-        </span>
-        <span className="text-xs text-slate-500 font-['Inter']">
-          {pedido.hora}
-        </span>
-        <span
-          className={`ml-auto px-2 py-1 rounded text-xs font-semibold font-['Inter'] ${estadoClase}`}
-        >
-          {estadoBadge}
-        </span>
+    <article className="border border-slate-200 rounded-md p-3 flex flex-col gap-2">
+      <div className="flex justify-between gap-2">
+        <strong className="text-sm text-slate-800">{pedido.codigo}</strong>
+        <span className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-700">{MODALIDADES[pedido.modalidad_entrega]}</span>
       </div>
-
-      {/* Productos */}
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-bold text-slate-800 font-['Inter']">
-          Productos ({pedido.productos.length})
-        </span>
-        {pedido.productos.map((prod, i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between text-xs font-['Inter']"
-          >
-            <span className="text-slate-500">
-              {prod.verificado ? "✓ " : ""}
-              {prod.nombre}
-            </span>
-            <span className="text-slate-800 font-medium">{prod.cantidad}</span>
-          </div>
-        ))}
+      <p className="text-xs text-slate-500">{fecha(pedido.fecha_creacion)} · {pedido.cliente_nombre || "Sin nombre"}</p>
+      <p className="text-xs text-slate-800">{productos(pedido)}</p>
+      {pedido.direccion_delivery && <p className="text-xs text-slate-500">Dirección: {pedido.direccion_delivery}</p>}
+      {pedido.repartidor_nombre && <p className="text-xs text-slate-500">Repartidor: {pedido.repartidor_nombre}</p>}
+      <p className="text-xs text-slate-500">Estado: {pedido.estado === "DESPACHADO" ? "Despachado" : pedido.fecha_verificacion ? "Verificado" : "Por verificar"}</p>
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button type="button" onClick={detalle} className="btn-secundario">Ver detalle</button>
+        {children}
       </div>
-
-      {/* Observaciones (solo si existen) */}
-      {pedido.observaciones && (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-bold text-slate-800 font-['Inter']">
-            Observaciones
-          </span>
-          <div className="bg-slate-50 border border-slate-200 rounded-md p-2.5 text-xs text-slate-500 font-['Inter']">
-            {pedido.observaciones}
-          </div>
-        </div>
-      )}
-
-      {/* Meta (solo para despachados) */}
-      {meta && (
-        <div className="flex flex-col gap-1 pt-2 border-t border-slate-200">
-          <MetaRow label="Entregado en" valor={meta.entregadoEn} />
-          <MetaRow label="Hora de despacho" valor={meta.horaDespacho} />
-          <MetaRow
-            label="Atendido por"
-            valor={meta.atiendePor || meta.atendidoPor}
-          />
-        </div>
-      )}
-
-      {/* Botones */}
-      {(onAccion || onSecundario) && (
-        <div className="flex flex-col gap-2 pt-1">
-          {onAccion && (
-            <button
-              type="button"
-              onClick={onAccion}
-              className="h-10 bg-orange-600 text-white text-xs font-semibold rounded-md hover:bg-orange-700 transition-colors"
-            >
-              {accionLabel}
-            </button>
-          )}
-          {onSecundario && secundarioLabel && (
-            <button
-              type="button"
-              onClick={onSecundario}
-              className="h-10 bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded-md hover:bg-slate-50 transition-colors"
-            >
-              {secundarioLabel}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------
-// Subcomponente: Fila de meta
-// ----------------------------------------------------------------------
-function MetaRow({ label, valor }) {
-  return (
-    <div className="flex items-center justify-between text-xs font-['Inter']">
-      <span className="text-slate-500">{label}:</span>
-      <span className="text-slate-800 font-bold">{valor || "—"}</span>
-    </div>
+    </article>
   );
 }

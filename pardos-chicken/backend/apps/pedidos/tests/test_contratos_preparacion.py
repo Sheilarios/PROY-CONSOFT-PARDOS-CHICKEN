@@ -9,7 +9,9 @@ from apps.usuarios.models import Usuario
 
 @pytest.fixture
 def api_cocina():
-    usuario = Usuario.objects.create_user(username="cocina_contratos", password="12345678")
+    usuario = Usuario.objects.create_user(
+        username="cocina_contratos", password="12345678", rol=Usuario.Rol.COCINERO
+    )
     api = APIClient()
     api.force_authenticate(user=usuario)
     return api, usuario

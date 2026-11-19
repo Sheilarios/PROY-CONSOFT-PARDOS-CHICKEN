@@ -34,11 +34,35 @@ export const pedidosService = {
   registrarIncidencia: (payload) =>
     axiosClient.post("/pedidos/incidencias/", payload).then((r) => r.data),
 
+  registrarIncidenciaCocina: (payload) =>
+    axiosClient.post("/pedidos/incidencias/cocina/", payload).then((r) => r.data),
+
   listarIncidencias: () =>
     axiosClient.get("/pedidos/incidencias/").then((r) => r.data.results || r.data),
 
   listarEdiciones: () =>
     axiosClient.get("/pedidos/ediciones/").then((r) => r.data.results || r.data),
+
+  listarEventosDespacho: () =>
+    axiosClient.get("/pedidos/eventos-despacho/").then((r) => r.data.results || r.data),
+
+  listarDespacho: () =>
+    axiosClient.get("/pedidos/despacho/").then((r) => r.data.results || r.data),
+
+  verificarDespacho: (id, payload) =>
+    axiosClient.post(`/pedidos/${id}/verificar-despacho/`, payload).then((r) => r.data),
+
+  registrarIncidenciaDespacho: (payload) =>
+    axiosClient.post("/pedidos/incidencias/despacho/", payload).then((r) => r.data),
+
+  listarRepartidores: () =>
+    axiosClient.get("/pedidos/repartidores/").then((r) => r.data.results || r.data),
+
+  crearRepartidor: (payload) =>
+    axiosClient.post("/pedidos/repartidores/", payload).then((r) => r.data),
+
+  liberarRepartidor: (id) =>
+    axiosClient.post(`/pedidos/repartidores/${id}/liberar/`).then((r) => r.data),
 
   actualizarProducto: (id, payload) =>
     axiosClient.put(`/pedidos/productos/${id}/`, payload).then((r) => r.data),
@@ -58,7 +82,7 @@ export const pedidosService = {
   asignarRepartidor: (idPedido, idRepartidor) =>
     axiosClient
       .post(`/pedidos/${idPedido}/asignar-repartidor/`, {
-        repartidor: idRepartidor,
+        repartidor_id: idRepartidor,
       })
       .then((r) => r.data),
 

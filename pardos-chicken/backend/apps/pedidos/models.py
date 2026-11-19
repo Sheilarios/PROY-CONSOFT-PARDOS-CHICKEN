@@ -83,6 +83,22 @@ class Cliente(models.Model):
         return self.nombre
 
 
+class Repartidor(models.Model):
+    """Repartidor propio disponible para un pedido Delivery a la vez."""
+
+    nombre = models.CharField(max_length=120)
+    telefono = models.CharField(max_length=9, unique=True)
+    zona = models.CharField(max_length=120, blank=True)
+    activo = models.BooleanField(default=True)
+    disponible = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class Pedido(models.Model):
     """
     Pedido registrado por caja (RF-01, RF-02, RF-03).
@@ -104,7 +120,7 @@ class Pedido(models.Model):
         DESPACHADO = "DESPACHADO", "Despachado"
         CANCELADO = "CANCELADO", "Cancelado"
 
-    # CANCELADO es un estado final y no forma parte del avance de producción.
+
     ESTADOS_ORDEN = [
         Estado.REGISTRADO,
         Estado.EN_COLA,
@@ -132,9 +148,27 @@ class Pedido(models.Model):
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
-    # Campos que se completan en los incrementos 2 y 3 (se dejan listos desde ahora)
     hora_inicio_preparacion = models.DateTimeField(null=True, blank=True)
     hora_fin_preparacion = models.DateTimeField(null=True, blank=True)
+    verificado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="pedidos_verificados",
+    )
+    fecha_verificacion = models.DateTimeField(null=True, blank=True)
+    repartidor = models.ForeignKey(
+        Repartidor, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="pedidos_asignados",
+    )
+    asignado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="pedidos_asignados_por_usuario",
+    )
+    fecha_asignacion = models.DateTimeField(null=True, blank=True)
+    despachado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="pedidos_despachados",
+    )
+    fecha_despacho = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Pedido"
@@ -161,10 +195,7 @@ class Pedido(models.Model):
 
     @property
     def prioridad(self) -> int:
-        """
-        RN-02: prioridad numérica según modalidad de entrega.
-        Menor número = mayor prioridad. 1) Salón 2) Delivery 3) Recojo.
-        """
+
         orden = {
             self.ModalidadEntrega.SALON: 1,
             self.ModalidadEntrega.DELIVERY: 2,
@@ -194,7 +225,7 @@ class DetallePedido(models.Model):
 
 
 class Incidencia(models.Model):
-    """Problema de un pedido registrado por el personal de caja."""
+    """Problema de un pedido registrado por caja, cocina o despacho."""
 
     class Tipo(models.TextChoices):
         DEMORA = "DEMORA", "Demora"
@@ -204,9 +235,22 @@ class Incidencia(models.Model):
         ERROR_PRODUCTOS = "ERROR_PRODUCTOS", "Producto o cantidad incorrectos"
         ERROR_MODALIDAD = "ERROR_MODALIDAD", "Modalidad de entrega incorrecta"
         ERROR_CLIENTE = "ERROR_CLIENTE", "Datos del cliente incorrectos"
+        FALTA_INSUMOS = "FALTA_INSUMOS", "Falta inesperada de insumos"
+        PRODUCTO_DANADO = "PRODUCTO_DANADO", "Producto dañado o en mal estado"
+        EQUIPO_AVERIADO = "EQUIPO_AVERIADO", "Avería de equipo de cocina"
+        ERROR_PREPARACION = "ERROR_PREPARACION", "Error en la preparación"
+        DEMORA_COCINA = "DEMORA_COCINA", "Demora inesperada"
+        OTRO_COCINA = "OTRO_COCINA", "Otro motivo de cocina"
+        PEDIDO_INCOMPLETO = "PEDIDO_INCOMPLETO", "Pedido incompleto"
+        PRODUCTO_INCORRECTO = "PRODUCTO_INCORRECTO", "Producto incorrecto"
+        PRODUCTO_DANADO_DESPACHO = "PRODUCTO_DANADO_DESPACHO", "Producto dañado en despacho"
+        REPARTIDOR_NO_DISPONIBLE = "REPARTIDOR_NO_DISPONIBLE", "Repartidor no disponible"
+        DEMORA_DESPACHO = "DEMORA_DESPACHO", "Demora en despacho"
+        PROBLEMA_ENTREGA = "PROBLEMA_ENTREGA", "Problema con la entrega"
+        OTRO_DESPACHO = "OTRO_DESPACHO", "Otro motivo de despacho"
 
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="incidencias")
-    tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    tipo = models.CharField(max_length=30, choices=Tipo.choices)
     descripcion = models.TextField(blank=True)
     registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     fecha_registro = models.DateTimeField(auto_now_add=True)
@@ -229,4 +273,22 @@ class EdicionPedido(models.Model):
     class Meta:
         verbose_name = "Edición de pedido"
         verbose_name_plural = "Ediciones de pedidos"
+        ordering = ["-fecha", "-id"]
+
+
+class EventoDespacho(models.Model):
+    """Trazabilidad de las operaciones de Despacho sobre un pedido."""
+
+    class Tipo(models.TextChoices):
+        VERIFICACION = "VERIFICACION", "Verificación"
+        ASIGNACION = "ASIGNACION", "Asignación de repartidor"
+        DESPACHO = "DESPACHO", "Despacho"
+
+    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="eventos_despacho")
+    tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    fecha = models.DateTimeField(auto_now_add=True)
+    descripcion = models.CharField(max_length=250)
+
+    class Meta:
         ordering = ["-fecha", "-id"]
